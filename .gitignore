@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+gant_env/
+.env
+
+# Logs et donnees de session (peuvent etre volumineux ou personnels)
+*.jsonl
+donnees_capteurs.jsonl
+
+# Arduino
+*.hex
+build/
+
+# OS
+.DS_Store
+Thumbs.db
