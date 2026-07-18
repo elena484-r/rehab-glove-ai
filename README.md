@@ -30,11 +30,12 @@ Ce projet propose un gant connecté low-cost qui :
                        │ WiFi / HTTP POST
 ┌──────────────────────▼──────────────────────────────┐
 │              CERVEAU (Raspberry Pi 5)               │
-│  Couche 2 : Classification mouvement (k-NN Python)  │
-│  Couche 3 : Politique adaptative RL (règles)        │
+│  Couche 2 : Analyse IA du profil moteur(k-NN Python)│
+│  Couche 3 RL : adapte le programme selon le profil  │
 │  Couche 4 : Prédiction progression (régression)     │
 │  + Appel Claude API → messages coaching français    │
 └─────────────────────────────────────────────────────┘
+Flexion complèteTous les doigts > 80°Flexion partielleTous les doigts entre 20° et 60°Mouvement asymétriqueCertains doigts bougent, d'autres pas — ça révèle une compensation inter-doigtsTremblementOscillations rapides détectées sur la dérivée temporelle
 ```
 
 ### Pipeline IA en 4 couches
