@@ -83,14 +83,14 @@ float pressionFiltree[3] = {0, 0, 0};
 // TIMING
 // ============================================================================
 unsigned long dernierEnvoi    = 0; //stock dernier moment où données sont envoyées
-unsigned long dernierAffichage = 0;
-const unsigned long INTERVALLE_ENVOI     = 500;  // ms
-const unsigned long INTERVALLE_AFFICHAGE = 300;  // ms
+unsigned long dernierAffichage = 0;// idem
+const unsigned long INTERVALLE_ENVOI     = 500;  //affiche les valeurs toutes les 500ms
+const unsigned long INTERVALLE_AFFICHAGE = 300;  // idem
 
 // ============================================================================
 // FONCTIONS MUX
 // ============================================================================
-void muxSelect(uint8_t canal) {
+void muxSelect(uint8_t canal) { // pour choisir quel capteur du MUX on veut lire (action)
   digitalWrite(MUX_S0, (canal >> 0) & 0x01);
   digitalWrite(MUX_S1, (canal >> 1) & 0x01);
   digitalWrite(MUX_S2, (canal >> 2) & 0x01);
@@ -99,13 +99,13 @@ void muxSelect(uint8_t canal) {
 }
 
 int lireCanalMux(uint8_t canal) {
-  muxSelect(canal);
+  muxSelect(canal); // on choisit le capteur
   long somme = 0;
   for (int i = 0; i < 8; i++) {
     somme += analogRead(MUX_SIG);
     delayMicroseconds(30);
   }
-  return somme / 8;
+  return somme / 8; // moyenne des 8 lectures (limiter les bruitages)
 }
 
 // ============================================================================
@@ -115,7 +115,7 @@ void mettreAJourFiltres() {
   // Flexion via MUX
   for (int i = 0; i < 5; i++) {
     int brut = lireCanalMux(i);
-    flexFiltre[i] = ALPHA * brut + (1 - ALPHA) * flexFiltre[i];
+    flexFiltre[i] = ALPHA * brut + (1 - ALPHA) * flexFiltre[i]; // ALPHA = 0.2
   }
   // Pression directs
   pressionFiltree[0] = ALPHA * analogRead(PIN_PRESSION_POUCE)  + (1 - ALPHA) * pressionFiltree[0];
@@ -147,7 +147,7 @@ void connecterWifi() {
   Serial.print("Connexion WiFi...");
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  unsigned long debut = millis();
+  unsigned long debut = millis(); //on enregistre à quel instant la connexion à debuté
   while (WiFi.status() != WL_CONNECTED && millis() - debut < 8000) {
     delay(300);
     Serial.print(".");
@@ -162,10 +162,10 @@ void connecterWifi() {
 // ============================================================================
 // ENVOI JSON VERS RPI 5
 // ============================================================================
-void envoyerDonnees() {
-  if (WiFi.status() != WL_CONNECTED) return;
+void envoyerDonnees() { // envoie mesures du gant vers rpi5
+  if (WiFi.status() != WL_CONNECTED) return; // pas de wifi pas d'envoi
 
-  StaticJsonDocument<512> doc;
+  StaticJsonDocument<512> doc; //création document JSON
 
   // Valeurs brutes filtrées
   JsonArray flex = doc.createNestedArray("flex");
@@ -264,7 +264,7 @@ void setup() {
   pinMode(PIN_BOUTON, INPUT_PULLUP);
 
   // Initialiser les filtres EMA avec une première lecture
-  for (int i = 0; i < 5; i++) flexFiltre[i] = lireCanalMux(i);
+  for (int i = 0; i < 5; i++) flexFiltre[i] = lireCanalMux(i); //afin que le filtre démarre donc avec une valeur réaliste
   pressionFiltree[0] = analogRead(PIN_PRESSION_POUCE);
   pressionFiltree[1] = analogRead(PIN_PRESSION_INDEX);
   pressionFiltree[2] = analogRead(PIN_PRESSION_MAJEUR);
