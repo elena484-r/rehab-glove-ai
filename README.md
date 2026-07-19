@@ -31,7 +31,7 @@ Ce projet propose un gant connecté low-cost qui :
 ┌──────────────────────▼──────────────────────────────┐
 │              CERVEAU (Raspberry Pi 5)               │
 │  Couche 2 : Analyse IA du profil moteur(k-NN Python)│
-│  Couche 3 RL : adapte le programme selon le profil  │
+│  Couche 3 RL : Adapte le programme selon le profil  │
 │  Couche 4 : Prédiction progression (régression)     │
 │  + Appel Claude API → messages coaching français    │
 └─────────────────────────────────────────────────────┘
@@ -43,7 +43,7 @@ Flexion complèteTous les doigts > 80°Flexion partielleTous les doigts entre 20
 | Couche | Rôle | Technologie | Où |
 |--------|------|-------------|-----|
 | 1 — Filtrage signal | Lisse le bruit des capteurs Velostat | Filtre EMA (α=0.2) | ESP32 C++ |
-| 2 — Classification | Reconnaît le type de mouvement | k-NN / arbre de décision | scikit-learn → C++ |
+| 2 — Analyse IA du profil moteur | Classification des stratégies motrices à partir des caractéristiques extraites des capteurs | k-NN / arbre de décision | scikit-learn → C++ |
 | 3 — Décision adaptative | Ajuste la difficulté automatiquement | Politique RL simple | Python RPi |
 | 4 — Prédiction | Prédit l'amplitude dans X semaines | Régression linéaire | scikit-learn |
 | Coach IA | Transforme les métriques en phrases | Claude API (Anthropic) | Python RPi |
