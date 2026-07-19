@@ -16,8 +16,8 @@ import os
 from dotenv import load_dotenv
 
 # Charge la cle API depuis le fichier .env
-load_dotenv()
-api_key = os.getenv("ANTHROPIC_API_KEY")
+load_dotenv() //Charger le fichier .env
+api_key = os.getenv("ANTHROPIC_API_KEY") //getenv veut dire :get environment variable
 
 if not api_key:
     print("ERREUR : cle API introuvable. Verifie ton fichier .env")
