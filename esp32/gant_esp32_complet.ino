@@ -34,13 +34,10 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-// ============================================================================
-// A MODIFIER avec tes infos
-// ============================================================================
-const char* WIFI_SSID     = "TON_SSID";
-const char* WIFI_PASSWORD = "TON_MOT_DE_PASSE";
-const char* SERVER_URL    = "http://192.168.1.XX:5000/data"; // IP du RPi 5
-// ============================================================================
+
+const char* WIFI_SSID     = "Elena's Galaxy A54 5G";
+const char* WIFI_PASSWORD = "elena234";
+const char* SERVER_URL    = "http://192.168.1.XX:5000/data"; // IP du RPi 5 (change à chaque connexion)
 
 // --- Pins MUX ---
 #define MUX_SIG  39
@@ -65,13 +62,10 @@ const char* SERVER_URL    = "http://192.168.1.XX:5000/data"; // IP du RPi 5
 #define OLED_RESET -1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// ============================================================================
-// CALIBRATION (à remplir après avoir mesuré tes capteurs réels)
-// Procédure : main ouverte = noter la valeur -> valMin
-//             main fermée  = noter la valeur -> valMax
-// ============================================================================
-int flexMin[5] = {0,    0,    0,    0,    0   }; // à mesurer main ouverte
-int flexMax[5] = {3000, 3000, 4095, 3100, 3000}; // à mesurer main fermée
+
+// CALIBRATION (réalisé via des tests en HW)
+int flexMin[5] = {0,    0,    0,    0,    0   }; // mesurer main ouverte
+int flexMax[5] = {3000, 3000, 4095, 3100, 3000}; // mesurer main fermée
                  // pouce  index  majeur  annulaire  auriculaire
 
 int pressionMin[3] = {0,   0,   0  }; // sans appui
@@ -82,13 +76,13 @@ int pressionMax[3] = {3500, 3500, 3500}; // appui fort
 // FILTRE EMA (Couche 1 pipeline IA)
 // ============================================================================
 const float ALPHA = 0.2;
-float flexFiltre[5]     = {0, 0, 0, 0, 0};
+float flexFiltre[5]     = {0, 0, 0, 0, 0}; // stockent les valeurs filtrées des capteurs après EMA
 float pressionFiltree[3] = {0, 0, 0};
 
 // ============================================================================
 // TIMING
 // ============================================================================
-unsigned long dernierEnvoi    = 0;
+unsigned long dernierEnvoi    = 0; //stock dernier moment où données sont envoyées
 unsigned long dernierAffichage = 0;
 const unsigned long INTERVALLE_ENVOI     = 500;  // ms
 const unsigned long INTERVALLE_AFFICHAGE = 300;  // ms
