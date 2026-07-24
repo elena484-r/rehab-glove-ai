@@ -64,7 +64,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 
 // CALIBRATION (réalisé via des tests en HW)
-int flexMin[5] = {0,    0,    0,    0,    0   }; // mesurer main ouverte
+int flexMin[5] = {699,  0,    2260, 15,   1426   }; // mesurer main ouverte
 int flexMax[5] = {3000, 3000, 4095, 3100, 3000}; // mesurer main fermée
                  // pouce  index  majeur  annulaire  auriculaire
 
@@ -130,7 +130,7 @@ int flexEnAngle(int indexDoigt) {
   return constrain(
     map((int)flexFiltre[indexDoigt], flexMin[indexDoigt], flexMax[indexDoigt], 0, 90),
     0, 90
-  );
+  ); 
 }
 
 int pressionEnPourcentage(int indexDoigt) {
