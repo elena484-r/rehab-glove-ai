@@ -57,7 +57,7 @@ Flexion complèteTous les doigts > 80°Flexion partielleTous les doigts entre 20
 | ESP32 | MCU embarqué : lecture capteurs, filtrage, envoi WiFi |
 | CD74HC4067 | Multiplexeur 16 canaux : 8 capteurs sur 1 broche analogique |
 | 5× capteurs flexion (Velostat fait main) | Mesure de flexion par doigt (0°–90°) |
-| 3× capteurs pression (Velostat fait main) | Détection de force (pouce, index, majeur) |
+| 3× capteurs pression | Détection de force (pouce, index, majeur) |
 | Écran OLED SSD1306 | Affichage feedback + messages coach |
 | LED + Buzzer + Bouton | Feedback multimodal |
 | Raspberry Pi 5 | Traitement IA, serveur Flask, appels Claude API |
