@@ -6,11 +6,17 @@
   
   Parcours utilisateur :
     1. Démarrage (appui long)
-    2. Évaluation initiale (4 tests)
-    3. Affichage profil moteur
-    4. Séance d'exercices avec feedback LED/buzzer
-    5. Adaptation RL affichée
+    2. Évaluation initiale (4 tests) -> POST /evaluation
+    3. Affichage profil moteur (couche 1 K-NN)
+    4. Séance d'exercices avec feedback LED/buzzer -> POST /data
+    5. Adaptation RL affichée (couche 2, répétitions gérées par le RPi)
     6. Fin de séance + prédiction progression
+
+  Communication reseau :
+    POST /evaluation : envoye une seule fois, a la fin des 4 tests.
+                        Retourne le profil K-NN + le premier exercice.
+    POST /data        : envoye en boucle pendant les exercices.
+                        Retourne la decision RL + le message coach.
 
   Bouton unique :
     Appui long  (>1.5s) : allumer / démarrer
@@ -42,12 +48,25 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+// Declare tot pour eviter le bug classique Arduino : l'IDE genere automatiquement
+// les prototypes de fonctions et les place juste apres les #include, AVANT le reste
+// du fichier. Si un type custom (enum) utilise comme retour/parametre de fonction
+// est defini plus bas, le prototype auto-genere ne le connait pas encore -> erreur
+// "'ActionBouton' does not name a type". On definit donc l'enum ici, en tout premier.
+enum ActionBouton { AUCUNE, APPUI_COURT, APPUI_LONG, DOUBLE_APPUI };
+
 // ============================================================================
 // CONFIGURATION RESEAU
 // ============================================================================
 const char* WIFI_SSID     = "Elena's Galaxy A54 5G";
 const char* WIFI_PASSWORD = "elena234";
-const char* SERVER_URL    = "http://10.254.218.206:5000/data";
+const char* SERVER_HOST   = "http://10.254.218.206:5000";
+
+// Deux endpoints distincts sur le pipeline_bridge.py :
+//   /evaluation -> une fois, apres les 4 tests initiaux
+//   /data       -> en boucle, pendant les exercices
+String urlEvaluation() { return String(SERVER_HOST) + "/evaluation"; }
+String urlData()       { return String(SERVER_HOST) + "/data"; }
 
 // ============================================================================
 // PINS
@@ -109,15 +128,37 @@ EtatGant etatActuel = ETAT_VEILLE;
 // ============================================================================
 // DONNÉES SESSION
 // ============================================================================
-String profilMoteur    = "";  // reçu depuis RPi
-String messageCoach    = "";  // reçu depuis RPi
-String messageRL       = "";  // reçu depuis RPi
-String messagePred     = "";  // reçu depuis RPi
-int    difficulteNiv   = 1;   // niveau difficulté actuel
-int    repetitionsOK   = 0;   // répétitions réussies
-int    repetitionsCible = 15; // cible selon programme
-int    exerciceActuel  = 1;   // numéro exercice en cours
+String profilMoteur    = "";  // reçu depuis RPi (/evaluation)
+String profilMoteurFr  = "";  // libelle FR pret a afficher, reçu depuis RPi (/evaluation)
+float  confianceProfil = 0;   // confiance du K-NN (%), reçue depuis RPi
+String messageCoach    = "";  // reçu depuis RPi (/data)
+String messageRL       = "";  // reçu depuis RPi (/data -> message_rl)
+String messagePred     = "";  // couche 3 (prédiction) non branchée côté RPi pour l'instant
+int    difficulteNiv   = 1;   // niveau difficulté actuel (mis à jour par le RPi)
+int    repetitionsOK   = 0;   // répétitions réussies (comptées localement pour le feedback immédiat)
+int    repetitionsCible = 15; // cible : desormais fixee par le RPi (champ "repetitions")
+int    exerciceActuel  = 1;   // NUMERO D'AFFICHAGE local uniquement (1,2,3... pour l'ecran) — jamais utilise pour decider la fin de seance
 bool   mouvementBon    = false; // feedback LED temps réel
+bool   repetitionVientDeFinir = false; // true un seul cycle, au moment ou repetitionsOK s'incremente
+
+String exerciceNomServeur  = ""; // nom lisible de l'exercice, reçu du RPi (exercice_nom)
+String consigneOledServeur = ""; // consigne à afficher, reçue du RPi (consigne_oled)
+int    exerciceIdServeur   = 0;  // id exercice cote RPi (exercice_id) — NE PILOTE PLUS la fin de seance
+bool   finSeanceServeur    = false; // le RPi indique que la séance/exercice doit s'arrêter (fin_seance) — SEUL declencheur de fin
+float  rewardDernier       = 0.0;   // dernier reward RL reçu (debug/affichage optionnel)
+
+// --- Echantillons temps-reel captures pendant les 4 tests d'evaluation ---
+// Confirme par couche1_knn.py (ExtracteurMetriques) : chaque testX_angles doit
+// etre une SERIE de mesures [doigt0..doigt4] dans le temps (pas un instantane),
+// car le K-NN calcule max/diff/variance/std le long de l'axe temporel (axis=0).
+#define MAX_ECH_TEST 40
+float bufAngles1[MAX_ECH_TEST][5]; int nEch1 = 0; // test1 : fermeture lente (-> amplitude, vitesse)
+float bufAngles2[MAX_ECH_TEST][5]; int nEch2 = 0; // test2 : ouverture complete (-> tremblement)
+float bufAngles3[MAX_ECH_TEST][5]; int nEch3 = 0; // test3 : serrage fort (-> vitesse, asymetrie)
+float bufAngles4[MAX_ECH_TEST][5]; int nEch4 = 0; // test4 : ecartement doigts (-> asymetrie)
+float bufPression3[MAX_ECH_TEST][3]; int nEchP3 = 0; // test3 : pression (-> force)
+unsigned long dernierEchTest = 0;
+const unsigned long PERIODE_ECH_TEST = 120; // ms entre deux echantillons pendant un test
 
 // ============================================================================
 // GESTION BOUTON
@@ -129,8 +170,6 @@ bool          attendDouble      = false;
 unsigned long tempsLacher1      = 0;
 const unsigned long SEUIL_LONG  = 1500; // ms pour appui long
 const unsigned long SEUIL_DBL   = 400;  // ms entre deux appuis pour double
-
-enum ActionBouton { AUCUNE, APPUI_COURT, APPUI_LONG, DOUBLE_APPUI };
 
 ActionBouton lireBouton() {
   bool appuye = (digitalRead(PIN_BOUTON) == LOW);
@@ -247,11 +286,12 @@ void afficherAccueil() {
 }
 
 void afficherEvaluation(int etape) {
+  // etape 0..3 : les 4 tests reels. etape 4 : ecran d'analyse (envoi /evaluation).
   oledEffacer();
-  const char* titres[]  = {"Test 1/4", "Test 2/4", "Test 3/4", "Analyse..."};
-  const char* lignes1[] = {"Fermez la main", "Ouvrez la main", "Serrez fort", "Traitement de"};
-  const char* lignes2[] = {"lentement.", "completement.", "5 secondes.", "vos resultats."};
-  const char* lignes3[] = {"Repetez : 5x", "Repetez : 5x", "Maintenez...", ""};
+  const char* titres[]  = {"Test 1/4", "Test 2/4", "Test 3/4", "Test 4/4", "Analyse..."};
+  const char* lignes1[] = {"Fermez la main", "Ouvrez la main", "Serrez fort", "Ecartez les", "Traitement de"};
+  const char* lignes2[] = {"lentement.", "completement.", "5 secondes.", "doigts.", "vos resultats."};
+  const char* lignes3[] = {"Repetez : 5x", "Repetez : 5x", "Maintenez...", "Repetez : 5x", ""};
 
   display.setCursor(0, 0);
   display.println(titres[etape]);
@@ -263,7 +303,7 @@ void afficherEvaluation(int etape) {
   display.println(lignes3[etape]);
   oledSeparateur(52);
   display.setCursor(0, 55);
-  if (etape < 3) display.println("Appui = suivant");
+  if (etape < 4) display.println("Appui = suivant");
   else           display.println("Patientez...");
   display.display();
 }
@@ -276,17 +316,17 @@ void afficherProfil() {
   display.setCursor(0, 14);
   display.println("Votre profil :");
 
-  // Traduit le profil reçu en texte court et lisible
+  // profil_fr est deja le libelle pret a afficher, envoye par le RPi (evite la duplication)
   display.setCursor(0, 26);
-  if      (profilMoteur == "deficit_mobilite")     display.println("Mobilite reduite");
-  else if (profilMoteur == "deficit_controle")     display.println("Controle a amelio.");
-  else if (profilMoteur == "deficit_coordination") display.println("Coordination");
-  else if (profilMoteur == "recuperation")         display.println("Bonne progression");
-  else                                             display.println(profilMoteur.c_str());
+  if (profilMoteurFr.length() > 0) display.println(profilMoteurFr.c_str());
+  else                             display.println(profilMoteur.c_str());
 
   display.setCursor(0, 40);
   display.print("Niveau : ");
-  display.println(difficulteNiv);
+  display.print(difficulteNiv);
+  display.print("  (");
+  display.print((int)confianceProfil);
+  display.println("%)");
   oledSeparateur(52);
   display.setCursor(0, 55);
   display.println("2x appui = suite");
@@ -296,13 +336,29 @@ void afficherProfil() {
 void afficherExercice() {
   oledEffacer();
   display.setCursor(0, 0);
-  display.print("Exercice ");
-  display.print(exerciceActuel);
-  display.print(" / 4");
+  if (exerciceNomServeur.length() > 0) {
+    display.println(exerciceNomServeur);
+  } else {
+    display.print("Exercice ");
+    display.print(exerciceActuel);
+    display.print(" / 4");
+  }
   oledSeparateur(10);
   display.setCursor(0, 14);
-  display.println("Fermez la main");
-  display.println("doucement.");
+  if (consigneOledServeur.length() > 0) {
+    // Consigne envoyee par le RPi, repartie sur 2 lignes (~21 car/ligne)
+    String c = consigneOledServeur;
+    int fin = min((int)c.length(), 21);
+    if (fin < (int)c.length()) {
+      int espace = c.lastIndexOf(' ', fin);
+      if (espace > 0) fin = espace;
+    }
+    display.println(c.substring(0, fin));
+    if (fin < (int)c.length()) display.println(c.substring(fin + 1));
+  } else {
+    display.println("Fermez la main");
+    display.println("doucement.");
+  }
   display.setCursor(0, 36);
   display.print("Rep: ");
   display.print(repetitionsOK);
@@ -488,44 +544,164 @@ bool detecterMouvementBon() {
 }
 
 // ============================================================================
+// ECHANTILLONNAGE PENDANT LES 4 TESTS D'EVALUATION
+// ============================================================================
+// Appele en continu (throttle PERIODE_ECH_TEST) tant qu'on est dans un test.
+// etape : 0=test1, 1=test2, 2=test3 (+pression), 3=test4
+void echantillonnerTest(int etape) {
+  unsigned long maintenant = millis();
+  if (maintenant - dernierEchTest < PERIODE_ECH_TEST) return;
+  dernierEchTest = maintenant;
+
+  switch (etape) {
+    case 0:
+      if (nEch1 < MAX_ECH_TEST) {
+        for (int i = 0; i < 5; i++) bufAngles1[nEch1][i] = flexEnAngle(i);
+        nEch1++;
+      }
+      break;
+    case 1:
+      if (nEch2 < MAX_ECH_TEST) {
+        for (int i = 0; i < 5; i++) bufAngles2[nEch2][i] = flexEnAngle(i);
+        nEch2++;
+      }
+      break;
+    case 2:
+      if (nEch3 < MAX_ECH_TEST) {
+        for (int i = 0; i < 5; i++) bufAngles3[nEch3][i] = flexEnAngle(i);
+        nEch3++;
+      }
+      if (nEchP3 < MAX_ECH_TEST) {
+        for (int i = 0; i < 3; i++) bufPression3[nEchP3][i] = pressionEnPct(i);
+        nEchP3++;
+      }
+      break;
+    case 3:
+      if (nEch4 < MAX_ECH_TEST) {
+        for (int i = 0; i < 5; i++) bufAngles4[nEch4][i] = flexEnAngle(i);
+        nEch4++;
+      }
+      break;
+  }
+}
+
+void reinitialiserBuffersTest() {
+  nEch1 = 0; nEch2 = 0; nEch3 = 0; nEch4 = 0; nEchP3 = 0;
+}
+
+// ============================================================================
 // ENVOI DONNEES VERS RPI
 // ============================================================================
-void envoyerDonnees() {
+// ----------------------------------------------------------------------------
+// /evaluation : envoyee UNE FOIS, apres les 4 tests initiaux.
+// Chaque testX_angles est une SERIE temporelle [[d0..d4], [d0..d4], ...],
+// conforme a ExtracteurMetriques.extraire() (couche1_knn.py) qui calcule
+// max/diff/variance/std le long de l'axe temporel.
+// ----------------------------------------------------------------------------
+void envoyerEvaluation() {
   if (WiFi.status() != WL_CONNECTED) return;
 
-  StaticJsonDocument<512> doc;
-  JsonArray flex         = doc.createNestedArray("flex");
-  JsonArray pression     = doc.createNestedArray("pressure");
-  JsonArray angles       = doc.createNestedArray("angles");
-  JsonArray pressionPct  = doc.createNestedArray("pressure_pct");
-
-  for (int i = 0; i < 5; i++) {
-    flex.add((int)flexFiltre[i]);
-    angles.add(flexEnAngle(i));
+  DynamicJsonDocument doc(8192);
+  JsonArray t1  = doc.createNestedArray("test1_angles");
+  for (int s = 0; s < nEch1; s++) {
+    JsonArray ligne = t1.createNestedArray();
+    for (int i = 0; i < 5; i++) ligne.add(bufAngles1[s][i]);
   }
-  for (int i = 0; i < 3; i++) {
-    pression.add((int)pressionFiltree[i]);
-    pressionPct.add(pressionEnPct(i));
+  JsonArray t2  = doc.createNestedArray("test2_angles");
+  for (int s = 0; s < nEch2; s++) {
+    JsonArray ligne = t2.createNestedArray();
+    for (int i = 0; i < 5; i++) ligne.add(bufAngles2[s][i]);
+  }
+  JsonArray t3  = doc.createNestedArray("test3_angles");
+  for (int s = 0; s < nEch3; s++) {
+    JsonArray ligne = t3.createNestedArray();
+    for (int i = 0; i < 5; i++) ligne.add(bufAngles3[s][i]);
+  }
+  JsonArray t3p = doc.createNestedArray("test3_pression");
+  for (int s = 0; s < nEchP3; s++) {
+    JsonArray ligne = t3p.createNestedArray();
+    for (int i = 0; i < 3; i++) ligne.add(bufPression3[s][i]);
+  }
+  JsonArray t4  = doc.createNestedArray("test4_angles");
+  for (int s = 0; s < nEch4; s++) {
+    JsonArray ligne = t4.createNestedArray();
+    for (int i = 0; i < 5; i++) ligne.add(bufAngles4[s][i]);
   }
 
   String json;
   serializeJson(doc, json);
 
   HTTPClient http;
-  http.begin(SERVER_URL);
+  http.begin(urlEvaluation());
   http.addHeader("Content-Type", "application/json");
   int code = http.POST(json);
 
-  // Récupération des données de retour (profil, coach, RL, prédiction)
+  if (code == 200) {
+    String reponse = http.getString();
+    DynamicJsonDocument rep(1024);
+    if (!deserializeJson(rep, reponse)) {
+      if (rep.containsKey("profil"))         profilMoteur        = rep["profil"].as<String>();
+      if (rep.containsKey("profil_fr"))      profilMoteurFr      = rep["profil_fr"].as<String>();
+      if (rep.containsKey("confidence"))     confianceProfil     = rep["confidence"].as<float>();
+      if (rep.containsKey("difficulte"))     difficulteNiv       = rep["difficulte"].as<int>();
+      if (rep.containsKey("exercice_id"))    exerciceIdServeur   = rep["exercice_id"].as<int>();
+      if (rep.containsKey("exercice_nom"))   exerciceNomServeur  = rep["exercice_nom"].as<String>();
+      if (rep.containsKey("consigne_oled"))  consigneOledServeur = rep["consigne_oled"].as<String>();
+      if (rep.containsKey("repetitions"))    repetitionsCible    = rep["repetitions"].as<int>();
+    }
+  } else {
+    Serial.printf("[EVAL] Erreur HTTP %d\n", code);
+  }
+  http.end();
+
+  reinitialiserBuffersTest();
+}
+
+// ----------------------------------------------------------------------------
+// /data : envoyee en boucle pendant les exercices.
+// Retourne la decision RL (couche 2) + le message coach (Claude API).
+// ----------------------------------------------------------------------------
+void envoyerDonnees() {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  StaticJsonDocument<512> doc;
+  JsonArray angles       = doc.createNestedArray("angles");
+  JsonArray pressionPct  = doc.createNestedArray("pressure_pct");
+
+  for (int i = 0; i < 5; i++) angles.add(flexEnAngle(i));
+  for (int i = 0; i < 3; i++) pressionPct.add(pressionEnPct(i));
+  // succes = une repetition vient d'etre validee depuis le dernier envoi (evenement ponctuel),
+  // pas l'etat instantane du mouvement (sinon le RL recoit un "succes" toutes les 500ms).
+  doc["succes"] = repetitionVientDeFinir;
+  repetitionVientDeFinir = false; // consomme l'evenement
+
+  String json;
+  serializeJson(doc, json);
+
+  HTTPClient http;
+  http.begin(urlData());
+  http.addHeader("Content-Type", "application/json");
+  int code = http.POST(json);
+
   if (code == 200) {
     String reponse = http.getString();
     StaticJsonDocument<512> rep;
     if (!deserializeJson(rep, reponse)) {
-      if (rep.containsKey("profil"))      profilMoteur = rep["profil"].as<String>();
-      if (rep.containsKey("coach"))       messageCoach = rep["coach"].as<String>();
-      if (rep.containsKey("rl"))          messageRL    = rep["rl"].as<String>();
-      if (rep.containsKey("prediction"))  messagePred  = rep["prediction"].as<String>();
-      if (rep.containsKey("difficulte"))  difficulteNiv = rep["difficulte"].as<int>();
+      String status = rep["status"] | "";
+      if (status == "attente_evaluation") {
+        // Le RPi n'a pas encore d'agent RL (evaluation pas encore faite cote serveur)
+        if (rep.containsKey("message_oled")) consigneOledServeur = rep["message_oled"].as<String>();
+      } else {
+        if (rep.containsKey("message_rl"))     messageRL           = rep["message_rl"].as<String>();
+        if (rep.containsKey("coach"))          messageCoach        = rep["coach"].as<String>();
+        if (rep.containsKey("difficulte"))     difficulteNiv       = rep["difficulte"].as<int>();
+        if (rep.containsKey("exercice_id"))    exerciceIdServeur   = rep["exercice_id"].as<int>();
+        if (rep.containsKey("exercice_nom"))   exerciceNomServeur  = rep["exercice_nom"].as<String>();
+        if (rep.containsKey("consigne_oled"))  consigneOledServeur = rep["consigne_oled"].as<String>();
+        if (rep.containsKey("repetitions"))    repetitionsCible    = rep["repetitions"].as<int>();
+        if (rep.containsKey("fin_seance"))     finSeanceServeur    = rep["fin_seance"].as<bool>();
+        if (rep.containsKey("reward"))         rewardDernier       = rep["reward"].as<float>();
+      }
     }
   }
   http.end();
@@ -638,13 +814,18 @@ void loop() {
       break;
 
     case ETAT_EVALUATION:
+      // Echantillonne en continu pendant le test en cours (etapes 0..3)
+      if (etapeEvaluation < 4) {
+        echantillonnerTest(etapeEvaluation);
+      }
+
       if (action == APPUI_COURT) {
         etapeEvaluation++;
         if (etapeEvaluation >= 4) {
-          // Lancer l'analyse → envoyer données au RPi
-          afficherEvaluation(3);
-          envoyerDonnees();
-          delay(2000);
+          // Les 4 tests sont faits -> envoyer les series temporelles vers /evaluation (pas /data)
+          afficherEvaluation(4);
+          envoyerEvaluation();
+          delay(1500);
           etatActuel = ETAT_PROFIL;
           afficherProfil();
         } else {
@@ -670,7 +851,7 @@ void loop() {
         dernierAffichage = millis();
       }
 
-      // Mouvement bon détecté → compter répétition
+      // Mouvement bon détecté → compter répétition localement (feedback immédiat)
       if (mouvementBon) {
         static bool comptabilise = false;
         static unsigned long tempsDebut = 0;
@@ -681,6 +862,7 @@ void loop() {
         // Comptabiliser après 1 seconde de bon mouvement
         if (millis() - tempsDebut > 1000 && comptabilise) {
           repetitionsOK++;
+          repetitionVientDeFinir = true; // signale au prochain envoi /data qu'une repetition vient d'etre validee
           bipCourt();
           comptabilise = false;
 
@@ -688,14 +870,17 @@ void loop() {
             bipDouble();
             clignoterLED(3);
             afficherSuccesExercice();
-            delay(2000);
-
-            if (exerciceActuel >= 4) {
-              // Fin de tous les exercices
+            delay(1500);
+            // On ne decide PAS ici si la seance/l'exercice est termine : c'est le RPi
+            // (couche RL, via "fin_seance" dans la reponse /data) qui pilote la suite.
+            // On notifie juste immediatement le serveur du succes, sans attendre le tick 500ms.
+            envoyerDonnees();
+            if (finSeanceServeur) {
+              finSeanceServeur = false;
               etatActuel = ETAT_ADAPTATION;
-              envoyerDonnees(); // Récupère décision RL
               afficherAdaptation();
             } else {
+              // Le RPi peut avoir change d'exercice / de niveau : on resynchronise l'affichage
               exerciceActuel++;
               repetitionsOK = 0;
               afficherExercice();
@@ -748,10 +933,20 @@ void loop() {
       break;
   }
 
-  // Envoi données WiFi toutes les 500ms (sauf en veille)
-  if (etatActuel != ETAT_VEILLE && millis() - dernierEnvoi > 500) {
+  // Envoi données WiFi toutes les 500ms (sauf en veille et en évaluation,
+  // qui a son propre envoi ponctuel vers /evaluation)
+  if (etatActuel != ETAT_VEILLE && etatActuel != ETAT_EVALUATION &&
+      millis() - dernierEnvoi > 500) {
     envoyerDonnees();
     dernierEnvoi = millis();
+
+    // Le RPi (couche RL) peut décider de terminer l'exercice/la séance
+    // même si le compteur local de répétitions n'est pas encore atteint.
+    if (etatActuel == ETAT_EXERCICE && finSeanceServeur) {
+      finSeanceServeur = false;
+      etatActuel = ETAT_ADAPTATION;
+      afficherAdaptation();
+    }
   }
 
   delay(10);
