@@ -1,0 +1,20 @@
+{
+  "profil": "deficit_mobilite",
+  "exercices_ids": [
+    1,
+    2,
+    3,
+    7
+  ],
+  "exercice_idx": 3,
+  "difficulte": 1,
+  "seance": 1,
+  "historique": [
+    false,
+    false,
+    false
+  ],
+  "series_faites": 92,
+  "succes_nv5": 0,
+  "fatigue": 1.0
+}
