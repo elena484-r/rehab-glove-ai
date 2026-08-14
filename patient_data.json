@@ -1,0 +1,68 @@
+{
+  "patient_id": "Marc_001",
+  "total_sessions_completed": 3,
+  "current_profile": "deficit_controle",
+  "current_profile_fr": "Deficit de Controle",
+  "assigned_exercises": [
+    3,
+    8,
+    9,
+    4
+  ],
+  "last_exercise_levels": {
+    "3": 1,
+    "8": 1,
+    "9": 1,
+    "4": 1
+  },
+  "session_history": [
+    {
+      "seance": 1,
+      "date": "2026-08-14 17:59",
+      "profil": "deficit_controle",
+      "niveaux_atteints": {
+        "3": 1,
+        "8": 1,
+        "9": 1,
+        "4": 1
+      },
+      "score_moyen": 72.21229363876009
+    },
+    {
+      "seance": 2,
+      "date": "2026-08-14 18:11",
+      "profil": "deficit_controle",
+      "niveaux_atteints": {
+        "3": 1,
+        "8": 1,
+        "9": 1,
+        "4": 1
+      },
+      "score_moyen": 78.70540462466157
+    },
+    {
+      "seance": 3,
+      "date": "2026-08-14 18:28",
+      "profil": "deficit_controle",
+      "niveaux_atteints": {
+        "3": 1,
+        "8": 1,
+        "9": 1,
+        "4": 1
+      },
+      "score_moyen": 73.0552122759545
+    }
+  ],
+  "current_session_data": {
+    "exercice_idx": 3,
+    "difficulte": 1,
+    "series_faites": 7,
+    "succes_nv5": 0,
+    "historique_série": [
+      false,
+      false,
+      false
+    ],
+    "scores_exercices": {}
+  }
+}

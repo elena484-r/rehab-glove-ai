@@ -20,6 +20,8 @@ from couche2_rl_env import AgentRL, EtatPatient, GestionnaireSession
 load_dotenv()
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 LOG_PATH          = "historique_sessions.jsonl"
+DELAI_MIN_SERIE_S = 1.5          # secondes minimum entre deux series reelles
+_dernier_appel_data = {"ts": None}
 app               = Flask(__name__)
 
 # ============================================================
@@ -145,7 +147,27 @@ def recevoir_donnees():
             "fin_seance":   False,
         }), 200
 
+    maintenant = datetime.now().timestamp()
+    dernier    = _dernier_appel_data.get("ts")
+    if dernier is not None and (maintenant - dernier) < DELAI_MIN_SERIE_S:
+        ex = BIBLIOTHEQUE[etat_patient.exercice_actuel_id]
+        nv = ex.niveaux[etat_patient.difficulte - 1]
+        return jsonify({
+            "status":        "ignore_rafale",
+            "action":        0,
+            "message_rl":    "",
+            "difficulte":    etat_patient.difficulte,
+            "exercice_nom":  ex.nom,
+            "consigne_oled": nv.consigne_oled,
+            "repetitions":   nv.repetitions,
+            "fin_seance":    False,
+            "coach":         "",
+            "reward":        0,
+        }), 200
+    _dernier_appel_data["ts"] = maintenant
+
     amplitude = float(np.mean(angles) / 90.0)
+
     metriques_obs = {
         "amplitude":   amplitude,
         "force":       float(np.mean(pression) / 100.0),
@@ -155,6 +177,12 @@ def recevoir_donnees():
     }
 
     reward, action, msg_rl, fin_seance, _ = agent_rl.step(metriques_obs, succes)
+
+    # La seance est reellement terminee (tous les exercices completes) :
+    # on incremente le compteur pour que la PROCHAINE seance ait le bon numero.
+    if fin_seance:
+        etat_patient.seance += 1
+
     ex = BIBLIOTHEQUE[etat_patient.exercice_actuel_id]
     nv = ex.niveaux[etat_patient.difficulte - 1]
 
