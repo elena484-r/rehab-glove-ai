@@ -36,6 +36,34 @@ agent_rl     = AgentRL(etat_patient) if etat_patient else None
 print(f"[BRIDGE] Session : {'reprise seance ' + str(etat_patient.seance+1) if etat_patient else 'premiere seance'}")
 print("[BRIDGE] Pret sur port 5000")
 
+# Chargement historique sessions (pour la prediction)
+historique_sessions = []
+if os.path.exists(LOG_PATH):
+    with open(LOG_PATH) as f:
+        for line in f:
+            try:
+                historique_sessions.append(json.loads(line.strip()))
+            except Exception:
+                pass
+print(f"[BRIDGE] {len(historique_sessions)} sessions en memoire")
+
+
+# Fonction prediction progression (couche 4)
+def generer_prediction(sessions):
+    if len(sessions) < 3:
+        return ""
+    scores = [s.get("scores", {}).get("rom", 0) for s in sessions[-10:]]
+    if len(scores) < 3:
+        return ""
+    x = np.arange(len(scores), dtype=float)
+    y = np.array(scores)
+    xm, ym = np.mean(x), np.mean(y)
+    pente = np.sum((x-xm)*(y-ym)) / np.sum((x-xm)**2)
+    score_predit = min(5.0, max(0.0, ym + pente * 14))
+    amp = round(score_predit * 18, 1)
+    tendance = "hausse" if pente > 0.01 else "stable" if pente > -0.01 else "baisse"
+    return f"+{amp}deg dans ~2 sem. ({tendance})"
+
 
 # ============================================================
 # GET /status — VERIFIE SI EVALUATION REQUISE AU DEMARRAGE
@@ -162,6 +190,12 @@ def recevoir_donnees():
     GestionnaireSession.sauvegarder_progression(etat_patient)
 
     # Log session
+  historique_sessions.append({
+    "timestamp": datetime.now().isoformat(),
+    "profil":    etat_patient.profil,
+    "scores":    {"rom": metriques_obs["amplitude"] * 5},
+    "difficulte": etat_patient.difficulte,
+})
     with open(LOG_PATH, "a") as f:
         f.write(json.dumps({
             "timestamp": datetime.now().isoformat(),
@@ -174,6 +208,7 @@ def recevoir_donnees():
     print(f"[{ts}] {ex.nom} niv{etat_patient.difficulte} | succes={succes} | {msg_rl}")
 
     return jsonify({
+        "prediction": generer_prediction(historique_sessions),
         "status":        "ok",
         "action":        action,
         "message_rl":    msg_rl,
