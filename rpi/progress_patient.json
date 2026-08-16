@@ -6,7 +6,7 @@
     3,
     7
   ],
-  "exercice_idx": 0,
+  "exercice_idx": 3,
   "difficulte": 1,
   "seance": 5,
   "historique": [
@@ -14,7 +14,7 @@
     false,
     false
   ],
-  "series_faites": 4,
+  "series_faites": 7,
   "succes_nv5": 0,
-  "fatigue": 0.16
+  "fatigue": 0.8800000000000002
 }

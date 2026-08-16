@@ -2,10 +2,32 @@
 ============================================================
 PIPELINE BRIDGE V2 — GANT REEDUCATION AVC
 ============================================================
-Nouveautes v2 :
-  - GET /status : verifie si evaluation requise au demarrage
-  - Gestion automatique des seances (1=eval, 2-4=reprise, 5=reeval)
-  - progress_patient.json sauvegarde l'etat entre les seances
+Architecture pipeline (toutes les couches sur RPi) :
+
+  Couche 0 (ESP32) : EMA alpha=0.2 — NE PAS TOUCHER
+  Couche 1 (RPi)   : K-NN -> profil moteur dominant
+  Couche 2 (RPi)   : Agent RL -> adaptation difficulte + exercice
+  Couche 3 (RPi)   : Regression lineaire -> prediction progression
+  Coach    (RPi)   : Claude API -> message coach francais -> OLED
+
+Endpoints Flask :
+  GET  /status     : ESP32 demande au demarrage si evaluation requise
+  POST /evaluation : 4 tests -> profil K-NN + premier exercice
+  POST /data       : boucle 500ms -> decision RL + coach + prediction
+  GET  /health     : statut serveur
+
+Gestion des seances :
+  Seance 1   : evaluation K-NN obligatoire (4 tests)
+  Seances 2-4: reprise depuis progress_patient.json
+  Seance 5+  : reevaluation K-NN automatique
+
+Usage :
+  cd ~/rehab-glove-ai/rpi && python3 pipeline_bridge_v2.py
+
+Prerequis :
+  pip install flask scikit-learn numpy anthropic python-dotenv --break-system-packages
+  modele_knn.json, .env (ANTHROPIC_API_KEY), couche1_knn.py,
+  couche2_rl_env.py, exercises.py dans le meme dossier
 ============================================================
 """
 
@@ -20,8 +42,6 @@ from couche2_rl_env import AgentRL, EtatPatient, GestionnaireSession
 load_dotenv()
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 LOG_PATH          = "historique_sessions.jsonl"
-DELAI_MIN_SERIE_S = 1.5          # secondes minimum entre deux series reelles
-_dernier_appel_data = {"ts": None}
 app               = Flask(__name__)
 
 # ============================================================
@@ -36,6 +56,17 @@ extracteur  = ExtracteurMetriques()
 etat_patient = GestionnaireSession.charger_progression()
 agent_rl     = AgentRL(etat_patient) if etat_patient else None
 print(f"[BRIDGE] Session : {'reprise seance ' + str(etat_patient.seance+1) if etat_patient else 'premiere seance'}")
+
+# Chargement historique sessions pour la couche prediction (regression lineaire)
+historique_sessions = []
+if os.path.exists(LOG_PATH):
+    with open(LOG_PATH) as _f:
+        for _line in _f:
+            try:
+                historique_sessions.append(json.loads(_line.strip()))
+            except Exception:
+                pass
+print(f"[BRIDGE] {len(historique_sessions)} sessions chargees depuis l'historique")
 print("[BRIDGE] Pret sur port 5000")
 
 
@@ -147,27 +178,7 @@ def recevoir_donnees():
             "fin_seance":   False,
         }), 200
 
-    maintenant = datetime.now().timestamp()
-    dernier    = _dernier_appel_data.get("ts")
-    if dernier is not None and (maintenant - dernier) < DELAI_MIN_SERIE_S:
-        ex = BIBLIOTHEQUE[etat_patient.exercice_actuel_id]
-        nv = ex.niveaux[etat_patient.difficulte - 1]
-        return jsonify({
-            "status":        "ignore_rafale",
-            "action":        0,
-            "message_rl":    "",
-            "difficulte":    etat_patient.difficulte,
-            "exercice_nom":  ex.nom,
-            "consigne_oled": nv.consigne_oled,
-            "repetitions":   nv.repetitions,
-            "fin_seance":    False,
-            "coach":         "",
-            "reward":        0,
-        }), 200
-    _dernier_appel_data["ts"] = maintenant
-
     amplitude = float(np.mean(angles) / 90.0)
-
     metriques_obs = {
         "amplitude":   amplitude,
         "force":       float(np.mean(pression) / 100.0),
@@ -177,29 +188,30 @@ def recevoir_donnees():
     }
 
     reward, action, msg_rl, fin_seance, _ = agent_rl.step(metriques_obs, succes)
-
-    # La seance est reellement terminee (tous les exercices completes) :
-    # on incremente le compteur pour que la PROCHAINE seance ait le bon numero.
-    if fin_seance:
-        etat_patient.seance += 1
-
     ex = BIBLIOTHEQUE[etat_patient.exercice_actuel_id]
     nv = ex.niveaux[etat_patient.difficulte - 1]
 
     coach = generer_message_coach(metriques_obs, etat_patient.profil, msg_rl)
     GestionnaireSession.sauvegarder_progression(etat_patient)
 
-    # Log session
+    # Log session — mise a jour en memoire ET sur disque
+    session_log = {
+        "timestamp":    datetime.now().isoformat(),
+        "profil":       etat_patient.profil,
+        "scores":       {"rom": metriques_obs["amplitude"] * 5},
+        "difficulte":   etat_patient.difficulte,
+        "decision_rl":  msg_rl,
+    }
+    historique_sessions.append(session_log)
     with open(LOG_PATH, "a") as f:
-        f.write(json.dumps({
-            "timestamp": datetime.now().isoformat(),
-            "profil":    etat_patient.profil,
-            "scores":    {"rom": metriques_obs["amplitude"] * 5},
-            "difficulte": etat_patient.difficulte,
-        }) + "\n")
+        f.write(json.dumps(session_log) + "\n")
+
+    # Couche 3 : prediction de progression
+    prediction = generer_prediction(historique_sessions)
 
     ts = datetime.now().strftime("%H:%M:%S")
-    print(f"[{ts}] {ex.nom} niv{etat_patient.difficulte} | succes={succes} | {msg_rl}")
+    print(f"[{ts}] {ex.nom} niv{etat_patient.difficulte} | succes={succes} | {msg_rl}"
+          + (f" | pred: {prediction}" if prediction else ""))
 
     return jsonify({
         "status":        "ok",
@@ -211,8 +223,59 @@ def recevoir_donnees():
         "repetitions":   nv.repetitions,
         "fin_seance":    fin_seance,
         "coach":         coach,
+        "prediction":    prediction,
         "reward":        reward,
     }), 200
+
+
+# ============================================================
+# COUCHE 3 — PREDICTION DE PROGRESSION (regression lineaire)
+# ============================================================
+def generer_prediction(sessions: list) -> str:
+    """
+    Regression lineaire sur les scores ROM des dernieres sessions.
+    Predit l'amplitude dans ~2 semaines et retourne une chaine
+    courte lisible sur l'OLED de l'ESP32 (max ~20 chars).
+
+    Exemples de retour :
+      "+12deg dans ~2 sem."
+      "Progression stable."
+      "Consultez votre kine."
+      ""  (historique insuffisant — < 3 sessions)
+    """
+    if len(sessions) < 3:
+        return ""
+
+    # Prendre les 10 dernieres sessions pour la regression
+    scores = [s.get("scores", {}).get("rom", None) for s in sessions[-10:]]
+    scores = [s for s in scores if s is not None]
+
+    if len(scores) < 3:
+        return ""
+
+    x = np.arange(len(scores), dtype=float)
+    y = np.array(scores, dtype=float)
+    x_mean, y_mean = np.mean(x), np.mean(y)
+    denom = np.sum((x - x_mean) ** 2)
+
+    if denom == 0:
+        return "Progression stable."
+
+    pente = np.sum((x - x_mean) * (y - y_mean)) / denom
+
+    # Predire dans 14 seances (~2 semaines a 1 seance/jour)
+    score_futur = float(np.mean(scores)) + pente * 14
+    score_futur = max(0.0, min(5.0, score_futur))
+
+    # Conversion score ROM [0-5] -> amplitude en degres [0-90]
+    amplitude_deg = score_futur * 18.0
+
+    if pente > 0.02:
+        return f"+{amplitude_deg:.0f}deg dans ~2 sem."
+    elif pente > -0.02:
+        return "Progression stable."
+    else:
+        return "Consultez votre kine."
 
 
 # ============================================================
