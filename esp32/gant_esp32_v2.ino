@@ -58,7 +58,7 @@
 // ============================================================================
 const char* WIFI_SSID     = "Elena's Galaxy A54 5G";
 const char* WIFI_PASSWORD = "elena234";
-const char* SERVER_BASE   = "http://10.254.218.206:5000";
+const char* SERVER_BASE   = "http://10.63.232.206:5000";
 
 // ============================================================================
 // PINS
@@ -127,7 +127,8 @@ String materielRequis   = "";   // message materiel avant evaluation
 int    difficulteNiv    = 1;
 int    repetitionsCible = 15;
 int    repetitionsOK    = 0;
-int    exerciceActuel   = 1;
+int    exercicePosition = 1;   // position 1..N dans le parcours du profil courant (affichage)
+int    exerciceTotal    = 4;   // N = nb d'exercices du profil courant (affichage), maj depuis le serveur
 bool   evaluationRequise = true;  // par defaut true, mis a jour par /status
 bool   finSeanceServeur  = false;
 bool   mouvementBon      = false;
@@ -144,6 +145,17 @@ float bufPression3[BUF_SIZE][3];
 float bufAngles4[BUF_SIZE][5];
 int   buf1Cnt=0, buf2Cnt=0, buf3Cnt=0, buf4Cnt=0;
 int   etapeEval = 0;
+
+// ============================================================================
+// BUFFER SERIE (exercice en cours, hors evaluation)
+// Necessaire pour calculer vitesse/tremblement/asymetrie reels par serie,
+// exactement comme pour les 4 tests d'evaluation (meme logique, un seul buffer continu).
+// ============================================================================
+const int BUF_SERIE_SIZE = 200;    // ~1min a 300ms/echantillon, suffisant pour une serie
+float bufSerieAngles[BUF_SERIE_SIZE][5];
+float bufSeriePression[BUF_SERIE_SIZE][3];
+int   bufSerieCnt = 0;
+unsigned long dernierEchantSerie = 0;
 
 // ============================================================================
 // GESTION BOUTON UNIQUE
@@ -311,7 +323,7 @@ void afficherProfil() {
 void afficherExercice() {
   oledEffacer();
   display.setCursor(0,0);
-  display.print("Exercice "); display.print(exerciceActuel); display.print(" / 4");
+  display.print("Exercice "); display.print(exercicePosition); display.print(" / "); display.print(exerciceTotal);
   oledSep(10);
   display.setCursor(0,14);
   // Affiche la consigne recue du RPi (plus de texte en dur)
@@ -373,9 +385,7 @@ void afficherFinSeance() {
   display.setTextSize(1);
   oledSep(22);
   display.setCursor(0,26); display.println("Seance terminee !");
-  int pct = repetitionsCible>0 ? (repetitionsOK*100/repetitionsCible) : 0;
-  display.print("Reussite : "); display.print(pct); display.println("%");
-  display.print("Seance n"); display.println(numeroSeance);
+  display.setCursor(0,38); display.print("Seance n"); display.println(numeroSeance);
   oledSep(52);
   display.setCursor(0,55); display.println("2x appui = bilan");
   display.display();
@@ -481,11 +491,14 @@ bool verifierStatutSession() {
       numeroSeance      = doc["seance"].as<int>();
       materielRequis    = doc["materiel_requis"].as<String>();
       if(!evaluationRequise) {
-        // Charger les donnees de la session existante
+        // Charger les donnees de la session existante (reprise seance 2-4)
         consigneOled      = doc["consigne_oled"].as<String>();
         repetitionsCible  = doc["repetitions"].as<int>();
         difficulteNiv     = doc["difficulte"].as<int>();
         profilMoteur      = doc["profil"].as<String>();
+        // Synchronise le numero d'exercice sur la verite serveur (fixe l'affichage X/4 en reprise)
+        if(doc.containsKey("exercice_position")) exercicePosition = doc["exercice_position"].as<int>();
+        if(doc.containsKey("exercice_total"))    exerciceTotal    = doc["exercice_total"].as<int>();
       }
     }
   }
@@ -530,6 +543,8 @@ void envoyerEvaluation() {
       difficulteNiv    = rep["difficulte"].as<int>();
       consigneOled     = rep["consigne_oled"].as<String>();
       repetitionsCible = rep["repetitions"].as<int>();
+      if(rep.containsKey("exercice_position")) exercicePosition = rep["exercice_position"].as<int>();
+      if(rep.containsKey("exercice_total"))    exerciceTotal    = rep["exercice_total"].as<int>();
     }
   }
   http.end();
@@ -538,16 +553,32 @@ void envoyerEvaluation() {
 // ============================================================================
 // POST /data — DONNEES TEMPS REEL
 // ============================================================================
-void envoyerDonnees(bool succes) {
+// succes       : vrai si repetitionsCible atteint pour cette serie
+// echecManuel  : vrai si l'utilisateur a abandonne la serie via appui court
+void envoyerDonnees(bool succes, bool echecManuel) {
   if(WiFi.status()!=WL_CONNECTED) return;
-  StaticJsonDocument<512> doc;
+
+  // Doc dimensionne pour le buffer serie complet (jusqu'a BUF_SERIE_SIZE echantillons 5+3 floats)
+  DynamicJsonDocument doc(24576);
+
+  // Buffer serie complet -> permet au serveur de calculer amplitude/force/vitesse/tremblement/asymetrie
+  JsonArray sa = doc.createNestedArray("serie_angles");
+  for(int i=0;i<bufSerieCnt;i++){JsonArray r=sa.createNestedArray();for(int j=0;j<5;j++)r.add(bufSerieAngles[i][j]);}
+  JsonArray sp = doc.createNestedArray("serie_pression");
+  for(int i=0;i<bufSerieCnt;i++){JsonArray r=sp.createNestedArray();for(int j=0;j<3;j++)r.add(bufSeriePression[i][j]);}
+
+  // Snapshot final conserve pour compatibilite/debug
   JsonArray angles=doc.createNestedArray("angles");
   JsonArray pct=doc.createNestedArray("pressure_pct");
   for(int i=0;i<5;i++) angles.add(flexEnAngle(i));
   for(int i=0;i<3;i++) pct.add(pressionEnPct(i));
-  doc["succes"]=succes;
+
+  doc["succes"]       = succes;
+  doc["echec_manuel"] = echecManuel;
 
   String json; serializeJson(doc,json);
+  bufSerieCnt = 0;  // buffer consomme, pret pour la prochaine serie
+
   HTTPClient http;
   http.begin(String(SERVER_BASE)+"/data");
   http.addHeader("Content-Type","application/json");
@@ -563,7 +594,12 @@ void envoyerDonnees(bool succes) {
       if(rep.containsKey("difficulte"))   difficulteNiv    = rep["difficulte"].as<int>();
       if(rep.containsKey("fin_seance"))   finSeanceServeur = rep["fin_seance"].as<bool>();
       if(rep.containsKey("prediction"))   messagePred      = rep["prediction"].as<String>();
+      // Verite serveur pour la position affichee X / N (evite le desync avec l'increment local)
+      if(rep.containsKey("exercice_position")) exercicePosition = rep["exercice_position"].as<int>();
+      if(rep.containsKey("exercice_total"))    exerciceTotal    = rep["exercice_total"].as<int>();
     }
+  } else {
+    // Echec HTTP : le buffer est deja vide, la serie suivante en debutera un nouveau propre
   }
   http.end();
 }
@@ -599,7 +635,6 @@ void setup() {
 // ============================================================================
 // LOOP
 // ============================================================================
-unsigned long dernierEnvoi    = 0;
 unsigned long dernierAffichage = 0;
 unsigned long dernierEchant   = 0;
 
@@ -636,10 +671,11 @@ void loop() {
           afficherMateriel();
         } else {
           // Seances 2-4 → reprendre directement les exercices
+          // exercicePosition/exerciceTotal deja synchronises depuis /status (verifierStatutSession) — ne pas ecraser ici
           repetitionsOK  = 0;
-          exerciceActuel = 1;
           finSeanceServeur = false;
           etatActuel = ETAT_EXERCICE;
+          bufSerieCnt = 0;
           afficherExercice();
         }
       }
@@ -683,8 +719,9 @@ void loop() {
     case ETAT_PROFIL:
       if(action==DOUBLE_APPUI) {
         bipCourt();
-        repetitionsOK=0; exerciceActuel=1;
+        repetitionsOK=0; exercicePosition=1;
         finSeanceServeur=false;
+        bufSerieCnt = 0;
         etatActuel=ETAT_EXERCICE;
         afficherExercice();
       }
@@ -696,6 +733,14 @@ void loop() {
       if(millis()-dernierAffichage>300) {
         afficherExercice();
         dernierAffichage=millis();
+      }
+
+      // Echantillonnage continu de la serie (memes cadence/format que l'evaluation)
+      if(millis()-dernierEchantSerie>300 && bufSerieCnt<BUF_SERIE_SIZE) {
+        for(int i=0;i<5;i++) bufSerieAngles[bufSerieCnt][i]=flexEnAngle(i);
+        for(int i=0;i<3;i++) bufSeriePression[bufSerieCnt][i]=pressionEnPct(i);
+        bufSerieCnt++;
+        dernierEchantSerie=millis();
       }
 
       // Mouvement bon → compter repetition
@@ -710,7 +755,7 @@ void loop() {
           if(repetitionsOK>=repetitionsCible) {
             bipDouble(); clignoterLED(3);
             afficherSuccesExercice();
-            envoyerDonnees(true);
+            envoyerDonnees(true, false);
             delay(1500);
             etatActuel=ETAT_ADAPTATION;
             afficherAdaptation();
@@ -718,9 +763,9 @@ void loop() {
         }
       }
 
-      // Appui court = declarer echec
+      // Appui court = declarer echec / abandon volontaire de la serie
       if(action==APPUI_COURT) {
-        envoyerDonnees(false);
+        envoyerDonnees(false, true);
         etatActuel=ETAT_ADAPTATION;
         afficherAdaptation();
       }
@@ -738,7 +783,8 @@ void loop() {
     case ETAT_ADAPTATION:
       if(action==APPUI_COURT) {
         bipCourt();
-        exerciceActuel++;
+        // exercicePosition n'est plus incremente localement : il suit la reponse serveur
+        // (voir envoyerDonnees), pour rester coherent avec le X / N affiche.
         repetitionsOK=0;
         etatActuel=ETAT_COACH;
         afficherCoach();
@@ -749,12 +795,13 @@ void loop() {
     case ETAT_COACH:
       if(action==APPUI_COURT) {
         bipCourt();
-        if(exerciceActuel>4 || finSeanceServeur) {
+        if(finSeanceServeur) {
           bipFinSeance();
           etatActuel=ETAT_FIN_SEANCE;
           afficherFinSeance();
         } else {
           etatActuel=ETAT_EXERCICE;
+          bufSerieCnt = 0;
           afficherExercice();
         }
       }
@@ -775,7 +822,7 @@ void loop() {
       if(action==APPUI_LONG) {
         afficherAuRevoir();
         // Reset session locale
-        repetitionsOK=0; exerciceActuel=1;
+        repetitionsOK=0; exercicePosition=1;
         profilMoteur=""; consigneOled="";
         messageCoach=""; messagePred="";
         finSeanceServeur=false;
@@ -783,12 +830,6 @@ void loop() {
         afficherVeille();
       }
       break;
-  }
-
-  // Envoi WiFi toutes les 500ms (hors veille et evaluation)
-  if(etatActuel==ETAT_EXERCICE && millis()-dernierEnvoi>500) {
-    envoyerDonnees(mouvementBon);
-    dernierEnvoi=millis();
   }
 
   delay(10);
