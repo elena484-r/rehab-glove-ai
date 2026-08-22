@@ -1,20 +1,18 @@
 {
-  "profil": "deficit_mobilite",
+  "profil": "deficit_controle",
   "exercices_ids": [
-    1,
-    2,
     3,
-    7
+    8,
+    9,
+    4
   ],
   "exercice_idx": 3,
   "difficulte": 1,
-  "seance": 5,
+  "seance": 4,
   "historique": [
-    false,
-    false,
     false
   ],
-  "series_faites": 7,
+  "series_faites": 5,
   "succes_nv5": 0,
-  "fatigue": 0.8800000000000002
+  "fatigue": 0.2
 }
