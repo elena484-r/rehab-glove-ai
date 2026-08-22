@@ -194,10 +194,12 @@ class AgentRL:
         elif action == 1:
             # Augmenter difficulte
             etat.difficulte = self._clamp_difficulte(etat.difficulte + 1)
+            etat.historique = []   # CORRECTION BUG 1 : reset consecutifs apres changement niveau
 
         elif action == 2:
             # Diminuer difficulte
             etat.difficulte = self._clamp_difficulte(etat.difficulte - 1)
+            etat.historique = []   # CORRECTION BUG 1 : reset consecutifs apres changement niveau
 
         elif action == 3:
             # Passer a l'exercice suivant
@@ -205,8 +207,9 @@ class AgentRL:
                 etat.exercice_idx += 1
                 etat.series_faites = 0
                 etat.succes_nv5    = 0
-                etat.historique    = []
-                etat.difficulte    = self._clamp_difficulte(etat.difficulte)
+                etat.historique    = []       # reset compteurs consecutifs
+                etat.difficulte    = 1        # CORRECTION BUG 2 : reset niveau a 1
+                etat.fatigue       = 0.0      # reset fatigue pour nouvel exercice
                 nouvel_ex = BIBLIOTHEQUE[etat.exercice_actuel_id]
                 msg = f"{justification} -> {nouvel_ex.nom}"
             else:
@@ -257,12 +260,20 @@ class GestionnaireSession:
         return EtatPatient.depuis_dict(data)
 
     @staticmethod
-    def sauvegarder_progression(etat: EtatPatient):
-        """Sauvegarde l'etat dans progress_patient.json."""
-        with open(PROGRESS_FILE, "w") as f:
-            json.dump(etat.vers_dict(), f, indent=2)
-        print(f"[RL] Progression sauvegardee -> {PROGRESS_FILE}")
+    def sauvegarder_progression(etat: EtatPatient, chemin=PROGRESS_FILE):
+        def convertir_types_numpy(obj):
+            if isinstance(obj, (np.integer, int)):
+                return int(obj)
+            elif isinstance(obj, (np.floating, float)):
+                return float(obj)
+            elif isinstance(obj, (np.bool_, bool)):
+                return bool(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            return str(obj)
 
+        with open(chemin, "w") as f:
+            json.dump(etat.vers_dict(), f, indent=2, default=convertir_types_numpy)
     @staticmethod
     def initialiser_depuis_profil(resultat_knn):
         """Cree un nouvel EtatPatient depuis le resultat K-NN."""
@@ -307,4 +318,3 @@ if __name__ == "__main__":
         if fin:
             print("  -> SEANCE TERMINEE")
             break
-
