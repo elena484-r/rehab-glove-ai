@@ -167,20 +167,21 @@ def _enregistrer_seance_dans_historique(numero_seance, amplitude_moy_deg):
 def _construire_prediction(etat: EtatPatient, historique):
     """
     Message de prediction affiche en fin de seance (ecran ETAT_PREDICTION).
-
-    - Seances 1 a 3 : pas assez de points pour une regression fiable -> message
-      generique qualitatif seulement.
-    - Seance 4 et suivantes : regression lineaire (scikit-learn) de l'amplitude
-      moyenne (degres) en fonction du temps ecoule (jours), extrapolee a +14
-      jours, sur l'historique reellement enregistre.
     """
     if etat.seance < SEANCE_MIN_PREDICTION or len(historique) < 2:
         return "Progression en cours : quelques seances de plus sont necessaires pour une estimation chiffree."
 
     dates = [datetime.fromisoformat(h["timestamp"]) for h in historique]
     amplitudes = [h["amplitude_moy_deg"] for h in historique]
+    
     t0 = dates[0]
-    jours = np.array([[(d - t0).total_seconds() / 86400.0] for d in dates])
+    temps_total_jours = (dates[-1] - t0).total_seconds() / 86400.0
+
+    # 1. Si les tests sont realises dans la meme journee (ex: tests rapides), la pente en jours est faussee
+    if temps_total_jours < 0.5:
+        return f"Derniere amplitude moyenne : {amplitudes[-1]:.1f} deg. Poursuivez les seances quotidiennement pour activer la prediction."
+
+    jours = np.array([[ (d - t0).total_seconds() / 86400.0 ] for d in dates])
     y = np.array(amplitudes)
 
     modele = LinearRegression()
@@ -188,13 +189,20 @@ def _construire_prediction(etat: EtatPatient, historique):
 
     jour_actuel = jours[-1][0]
     amplitude_actuelle = amplitudes[-1]
-    amplitude_predite_14j = float(modele.predict([[jour_actuel + 14]])[0])
+    
+    # Prediction brute
+    amplitude_predite_raw = float(modele.predict([[jour_actuel + 14]])[0])
+    
+    # 2. Sécurité : On borne la prédiction entre 0° et 90° (limites anatomiques)
+    amplitude_predite_14j = max(0.0, min(90.0, amplitude_predite_raw))
     delta = amplitude_predite_14j - amplitude_actuelle
-    pente_par_jour = float(modele.coef_[0])
+
+    # 3. Sécurité : Plafond de variation réaliste (+/- 20° max sur 2 semaines)
+    delta = max(-20.0, min(20.0, delta))
 
     if delta >= 1.0:
         return (f"Tendance positive : amplitude estimee a +{delta:.0f} deg "
-                f"dans les 2 prochaines semaines (regression sur {len(historique)} seances). "
+                f"dans les 2 prochaines semaines. "
                 f"Estimation indicative, a confirmer avec votre kinesitherapeute.")
     elif delta <= -1.0:
         return (f"Tendance a surveiller : amplitude stable ou en leger recul "
@@ -202,7 +210,6 @@ def _construire_prediction(etat: EtatPatient, historique):
     else:
         return (f"Amplitude stable sur les {len(historique)} dernieres seances "
                 f"(evolution estimee < 1 deg sur 2 semaines). Regularite recommandee.")
-
 
 # ============================================================================
 # GET /status
