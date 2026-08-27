@@ -1,10 +1,10 @@
 {
-  "profil": "deficit_controle",
+  "profil": "deficit_mobilite",
   "exercices_ids": [
+    1,
+    2,
     3,
-    8,
-    9,
-    4
+    7
   ],
   "exercice_idx": 3,
   "difficulte": 1,

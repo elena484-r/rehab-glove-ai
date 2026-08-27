@@ -333,7 +333,7 @@ def receive_data():
 
     return jsonify(_reponse_exercice_courant({
         "fin_seance": False,
-        "coach": f"Serie {etat_courant.series_faites} - {msg}",
+        "coach": f"Serie {etat_courant.series_faites}: {msg}",
         "message_rl": msg,
     }))
 
