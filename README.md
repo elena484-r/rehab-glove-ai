@@ -7,7 +7,6 @@
 [![Arduino](https://img.shields.io/badge/Arduino-ESP32-teal?logo=arduino)](https://arduino.cc)
 [![scikit-learn](https://img.shields.io/badge/scikit--learn-K--NN-orange)](https://scikit-learn.org)
 [![Claude API](https://img.shields.io/badge/Claude-API-blueviolet)](https://anthropic.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ---
 
