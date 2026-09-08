@@ -36,7 +36,7 @@ All AI processing runs on a Raspberry Pi 5. The ESP32 handles only signal acquis
 │   CD74HC4067 multiplexer  →  16-ch analog on 1 GPIO        │
 │                                                             │
 │   Layer 0 : EMA filter  (α = 0.2, C++)                     │
-│   → JSON payload via WiFi HTTP POST every 500 ms           │
+│   → Single JSON POST per completed exercise series           │
 └────────────────────────────┬────────────────────────────────┘
                              │  WiFi / HTTP
 ┌────────────────────────────▼────────────────────────────────┐
