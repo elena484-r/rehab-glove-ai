@@ -12,7 +12,7 @@
 
 ## 📌 Overview
 
-Hand motor impairment affects millions of patients across a wide spectrum of pathologies: **stroke** (hemiplegia, spasticity), **Parkinson's disease** (resting tremor, bradykinesia), **Guillain-Barré syndrome** (peripheral motor nerve damage), **post-traumatic rehabilitation** (hand/wrist fractures, tendon injuries, crush injuries), and **post-surgical orthopedic recovery**.
+Hand motor impairment affects millions of patients across a wide spectrum of pathologies: **stroke** (hemiplegia, spasticity), **Parkinson's disease** (resting tremor, bradykinesia), **Guillain-Barré syndrome** (peripheral motor nerve damage), **post-traumatic rehabilitation** (hand/wrist fractures, tendon injuries, crush injuries),or **post-surgical orthopedic recovery**.
 
 In all these contexts, evidence-based rehabilitation requires **300–400 repetitions per session** to drive neuroplasticity and motor re-learning (Langhorne et al., 2011), yet sustaining this intensity without real-time adaptive feedback is a persistent clinical challenge.
 
