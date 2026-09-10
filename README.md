@@ -291,7 +291,7 @@ python3 patient_sim.py        # runs 4 simulated sessions with OLED output previ
 
 **Elena R.** — ESIEA, 2nd year preparatory cycle  
 Target specialization: Biomedical Engineering · Medical Robotics · Embedded AI  
-Project built entirely solo — hardware fabrication, embedded firmware, AI pipeline, documentation.
+System design and hardware integration carried out independently; software pipeline developed with the support of generative AI tools — all code fully reviewed, tested, and mastered by me.
 
 *Portfolio project — June–September 2026*
 
