@@ -1,13 +1,7 @@
 /*
   ============================================================================
-  GANT REEDUCATION AVC — CODE FINAL COMPLET V2
+  GANT REEDUCATION AVC
   ============================================================================
-  Nouveautes v2 :
-    - Verification /status au demarrage → saute l'evaluation si seance 2-4
-    - Ecran "Materiel requis" avant evaluation (balle souple)
-    - Consigne OLED recue du RPi (plus de texte en dur)
-    - Extinction propre : appui long depuis ETAT_PREDICTION → ETAT_VEILLE
-
   Parcours utilisateur :
     SEANCE 1 :
       Appui long → Accueil → GET /status → evaluation_requise=true
@@ -91,7 +85,7 @@ int pressionMin[3] = {0,    0,    0   };
 int pressionMax[3] = {3500, 3500, 3500};
 
 // ============================================================================
-// FILTRE EMA — Couche 0 pipeline IA (NE PAS MODIFIER)
+// FILTRE EMA — Couche 0 pipeline IA
 // ============================================================================
 const float ALPHA = 0.2;
 float flexFiltre[5]      = {0,0,0,0,0};
