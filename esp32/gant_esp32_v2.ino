@@ -145,7 +145,7 @@ int   etapeEval = 0;
 // Necessaire pour calculer vitesse/tremblement/asymetrie reels par serie,
 // exactement comme pour les 4 tests d'evaluation (meme logique, un seul buffer continu).
 // ============================================================================
-const int BUF_SERIE_SIZE = 200;    // ~1min a 300ms/echantillon, suffisant pour une serie
+const int BUF_SERIE_SIZE = 200;    // ~1min a 300ms/echantillon
 float bufSerieAngles[BUF_SERIE_SIZE][5];
 float bufSeriePression[BUF_SERIE_SIZE][3];
 int   bufSerieCnt = 0;
