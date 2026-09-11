@@ -194,12 +194,12 @@ class AgentRL:
         elif action == 1:
             # Augmenter difficulte
             etat.difficulte = self._clamp_difficulte(etat.difficulte + 1)
-            etat.historique = []   # CORRECTION BUG 1 : reset consecutifs apres changement niveau
+            etat.historique = []   # reset consecutifs apres changement niveau
 
         elif action == 2:
             # Diminuer difficulte
             etat.difficulte = self._clamp_difficulte(etat.difficulte - 1)
-            etat.historique = []   # CORRECTION BUG 1 : reset consecutifs apres changement niveau
+            etat.historique = []   # reset consecutifs apres changement niveau
 
         elif action == 3:
             # Passer a l'exercice suivant
@@ -208,7 +208,7 @@ class AgentRL:
                 etat.series_faites = 0
                 etat.succes_nv5    = 0
                 etat.historique    = []       # reset compteurs consecutifs
-                etat.difficulte    = 1        # CORRECTION BUG 2 : reset niveau a 1
+                etat.difficulte    = 1        # reset niveau a 1
                 etat.fatigue       = 0.0      # reset fatigue pour nouvel exercice
                 nouvel_ex = BIBLIOTHEQUE[etat.exercice_actuel_id]
                 msg = f"{justification} -> {nouvel_ex.nom}"
