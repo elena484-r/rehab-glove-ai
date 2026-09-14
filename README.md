@@ -1,6 +1,6 @@
-# 🖐️ Connected Rehabilitation Glove — Adaptive Hand Motor Recovery
+# 🖐️ Connected Rehabilitation Glove - Adaptive Hand Motor Recovery
 
-> **ESIEA — 2nd year preparatory cycle**  
+> **ESIEA - 2nd year preparatory cycle**  
 > Solo project · Hardware + Embedded AI · Portfolio for biomedical/robotics engineering internship
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://python.org)
@@ -59,7 +59,7 @@ All AI processing runs on a Raspberry Pi 5. The ESP32 handles only signal acquis
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Pipeline — Layer by Layer
+### Pipeline - Layer by Layer
 
 | Layer | Role | Method | Location |
 |-------|------|--------|----------|
@@ -71,13 +71,13 @@ All AI processing runs on a Raspberry Pi 5. The ESP32 handles only signal acquis
 
 ---
 
-## 🤖 AI Pipeline — Technical Details
+## 🤖 AI Pipeline - Technical Details
 
-### Layer 1 — Motor Profile Classification (k-NN)
+### Layer 1 - Motor Profile Classification (k-NN)
 
 The classifier maps **5 biomechanical features** to **4 motor deficit profiles**, following the clinical framework of the **Fugl-Meyer Assessment for Upper Extremity (FMA-UE)** and the **Action Research Arm Test (ARAT)**.
 
-**Assessment protocol — 4 standardized tests:**
+**Assessment protocol - 4 standardized tests:**
 
 | Test | Clinical Name | Reference Scale | Feature extracted |
 |------|--------------|-----------------|-------------------|
@@ -100,27 +100,27 @@ The classifier maps **5 biomechanical features** to **4 motor deficit profiles**
 
 | Profile | Clinical description | Exercises assigned |
 |---------|---------------------|-------------------|
-| `deficit_mobilite` | Reduced AROM — limited finger extension/flexion amplitude | E1, E2, E3, E7 |
-| `deficit_controle` | Postural instability — high tremor, poor dosing | E3, E4, E8, E9 |
-| `deficit_coordination` | Inter-finger dyssynergia — asymmetric activation | E2, E4, E5, E6 |
-| `recuperation` | Functional recovery phase — strength and speed training | E6, E7, E9, E10 |
+| `deficit_mobilite` | Reduced AROM - limited finger extension/flexion amplitude | E1, E2, E3, E7 |
+| `deficit_controle` | Postural instability - high tremor, poor dosing | E3, E4, E8, E9 |
+| `deficit_coordination` | Inter-finger dyssynergia - asymmetric activation | E2, E4, E5, E6 |
+| `recuperation` | Functional recovery phase - strength and speed training | E6, E7, E9, E10 |
 
 ---
 
-### Layer 2 — Adaptive RL Agent (Q-Learning)
+### Layer 2 - Adaptive RL Agent (Q-Learning)
 
 The difficulty adaptation is modelled as a **Markov Decision Process (MDP)**:
 
-**State space** `S = (AROM_bin, force_bin, tremor_bin, level, fatigue_bin)` — 5 dimensions, 108 discrete states.
+**State space** `S = (AROM_bin, force_bin, tremor_bin, level, fatigue_bin)` - 5 dimensions, 108 discrete states.
 
 **Action space:**
 
 | Action | Effect |
 |--------|--------|
-| A0 — Decrease | Difficulty level − 1 (min 1) |
-| A1 — Maintain | No change |
-| A2 — Increase | Difficulty level + 1 (max 5) |
-| A3 — Next exercise | Advance to next exercise in the profile's sequence |
+| A0 — Decrease | Difficulty level - 1 (min 1) |
+| A1 - Maintain | No change |
+| A2 - Increase | Difficulty level + 1 (max 5) |
+| A3 - Next exercise | Advance to next exercise in the profile's sequence |
 
 **Reward function:**
 
@@ -137,9 +137,9 @@ with α = 0.2, γ = 0.85, ε = 0.15.
 **Design choices:**
 - **Optimistic initialization** (`Q_init = +2.0`): forces exploration of all actions before exploitation, preventing premature convergence to "Maintain".
 - **Sliding window memory** (last 3 results): erases early-session failure effect; agent reacts to current patient state.
-- **Acclimatization period**: first 2 series of a new exercise apply 70% reduced failure penalty — mirroring the clinical discovery phase.
+- **Acclimatization period**: first 2 series of a new exercise apply 70% reduced failure penalty - mirroring the clinical discovery phase.
 - **Safety Envelope**: clinical rules override Q-Learning when the signal is unambiguous (3 consecutive successes → always increase; tremor > 0.65 → never increase).
-- **Persistent Q-table**: saved in `progress_patient.json` between sessions — the agent improves across sessions, not just within one.
+- **Persistent Q-table**: saved in `progress_patient.json` between sessions - the agent improves across sessions, not just within one.
 
 **Session management:**
 
@@ -151,7 +151,7 @@ with α = 0.2, γ = 0.85, ε = 0.15.
 
 ---
 
-### Layer 3 — Recovery Prediction (Linear Regression)
+### Layer 3 - Recovery Prediction (Linear Regression)
 
 Linear regression on AROM scores from the last 10 sessions.  
 Output displayed on OLED: `"+12° in ~2 weeks"` / `"Stable progression"` / `"Consult your physio"`.  
@@ -159,9 +159,9 @@ Minimum 3 completed sessions required before prediction is shown.
 
 ---
 
-### Coach — Claude API
+### Coach - Claude API
 
-On each completed series, a 1–2 sentence motivational message is generated in French, conditioned on:
+On each completed series, a 1-2 sentence motivational message is generated in French, conditioned on:
 - Motor deficit profile
 - Current AROM and tremor values
 - RL agent decision
@@ -175,8 +175,8 @@ Displayed on the OLED SSD1306. Fallback messages used if API is unavailable.
 | Component | Role |
 |-----------|------|
 | ESP32 DevKit | MCU: sensor reading, EMA filtering, WiFi JSON transmission |
-| CD74HC4067 | 16-channel analog multiplexer — 8 sensors on 1 analog GPIO |
-| 5× Velostat flex sensors (handmade) | Per-finger flexion measurement (0°–90°) |
+| CD74HC4067 | 16-channel analog multiplexer - 8 sensors on 1 analog GPIO |
+| 5× Velostat flex sensors (handmade) | Per-finger flexion measurement (0°-90°) |
 | 3× FSR pressure sensors | Grip force — thumb, index, middle finger |
 | OLED SSD1306 128×64 | Real-time feedback + coach messages |
 | LED + passive buzzer + button | Multimodal feedback and session control |
@@ -268,7 +268,7 @@ python3 patient_sim.py        # runs 4 simulated sessions with OLED output previ
 
 | Current limitation | Context |
 |-------------------|---------|
-| Velostat sensors are handmade and non-linear | Relative software calibration (per-finger min/max at startup) is applied. Documented honestly — absolute calibration is not possible with this material. Replacement by Spectra Symbol flex sensors is the natural next step. |
+| Velostat sensors are handmade and non-linear | Relative software calibration (per-finger min/max at startup) is applied. Documented honestly - absolute calibration is not possible with this material. Replacement by Spectra Symbol flex sensors is the natural next step. |
 | AI trained on simulated data | The noise profile was characterized on real sensors. Validation on a real patient cohort across multiple pathologies (stroke, Parkinson's, post-traumatic), in partnership with a physiotherapist or neurologist, is the required next step before any clinical use. |
 | No CE marking | A full MDR 2017/745 conformity study is required before any medical use. This is a research/portfolio prototype. |
 | No pain detection | Emergency stop via long button press is implemented. A between-session pain questionnaire is planned. |
@@ -278,23 +278,23 @@ python3 patient_sim.py        # runs 4 simulated sessions with OLED output previ
 ## 📚 Clinical References
 
 - **Langhorne P. et al. (2011).** *Motor recovery after stroke: a systematic review.* Lancet Neurology, 10(9), 861–872.
-- **Fugl-Meyer AR et al. (1975).** *The post-stroke hemiplegic patient — a method for evaluation of physical performance.* Scandinavian Journal of Rehabilitation Medicine.
+- **Fugl-Meyer AR et al. (1975).** *The post-stroke hemiplegic patient - a method for evaluation of physical performance.* Scandinavian Journal of Rehabilitation Medicine.
 - **Lyle RC (1981).** *A performance test for assessment of upper limb function in physical rehabilitation.* (ARAT) International Journal of Rehabilitation Research.
-- **Unified Parkinson's Disease Rating Scale (UPDRS)** — tremor and bradykinesia sub-score methodology.
-- **Hoehn MM & Yahr MD (1967).** *Parkinsonism: onset, progression and mortality.* Neurology — staging scale for motor impairment in Parkinson's disease.
-- **Hughes RA & Cornblath DR (2005).** *Guillain-Barré syndrome.* Lancet, 366(9497), 1653–1666 — peripheral motor nerve rehabilitation protocols.
-- **Colditz JC (2000).** *Therapist's management of the stiff hand.* Rehabilitation of the Hand and Upper Extremity — post-traumatic and post-surgical hand rehabilitation.
+- **Unified Parkinson's Disease Rating Scale (UPDRS)** - tremor and bradykinesia sub-score methodology.
+- **Hoehn MM & Yahr MD (1967).** *Parkinsonism: onset, progression and mortality.* Neurology - staging scale for motor impairment in Parkinson's disease.
+- **Hughes RA & Cornblath DR (2005).** *Guillain-Barré syndrome.* Lancet, 366(9497), 1653–1666 - peripheral motor nerve rehabilitation protocols.
+- **Colditz JC (2000).** *Therapist's management of the stiff hand.* Rehabilitation of the Hand and Upper Extremity - post-traumatic and post-surgical hand rehabilitation.
 
 ---
 
 ## 👩‍💻 Author
 
-**Elena R.** — ESIEA, 2nd year preparatory cycle  
+**Elena R.** - ESIEA, 2nd year preparatory cycle  
 Target specialization: Biomedical Engineering · Medical Robotics · Embedded AI  
-System design and hardware integration carried out independently; software pipeline developed with the support of generative AI tools — all code fully reviewed, tested, and mastered by me.
+System design and hardware integration carried out independently; software pipeline developed with the support of generative AI tools - all code fully reviewed, tested, and mastered by me.
 
-*Portfolio project — June–September 2026*
+*Portfolio project - June–September 2026*
 
 ---
 
-*Note: This is a student research prototype. It is not a certified medical device and must not be used for clinical diagnosis or treatment. The system is designed to be pathology-agnostic at the motor assessment level — the k-NN classifier operates on biomechanical features (AROM, tremor, coordination, fatigue) that are relevant across stroke, Parkinson's disease, Guillain-Barré syndrome, post-traumatic and post-surgical hand rehabilitation.*
+*Note: This is a student research prototype. It is not a certified medical device and must not be used for clinical diagnosis or treatment. The system is designed to be pathology-agnostic at the motor assessment level - the k-NN classifier operates on biomechanical features (AROM, tremor, coordination, fatigue) that are relevant across stroke, Parkinson's disease, Guillain-Barré syndrome, post-traumatic and post-surgical hand rehabilitation.*
