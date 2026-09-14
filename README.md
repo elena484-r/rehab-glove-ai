@@ -223,8 +223,7 @@ rehab-glove-ai/
 │   ├── couche2_rl_env.py          # (mirror) RL agent used at runtime
 │   ├── exercises.py               # (mirror) exercise library
 │   ├── modele_knn.json            # (mirror) trained model
-│   ├── progress_patient.json      # Persistent patient state + Q-table
-│   └── historique_patient.json    # Session history for regression prediction
+│   └── historique_patient_exemple.json    # Session history for regression prediction
 ├── docs/
 │   ├── schema_kicad.pdf         # KiCad schematic export
 |   ├── glove video (IN PROGRESS)         # Glove Usage Demonstration
