@@ -226,7 +226,7 @@ rehab-glove-ai/
 │   └── historique_patient_exemple.json    # Session history for regression prediction
 ├── docs/
 │   ├── schema_kicad.pdf         # KiCad schematic export
-|   ├── glove video (IN PROGRESS)         # Glove Usage Demonstration
+|   ├── glove video (link)        # Glove Usage Demonstration
 │   └── fiche_technique_gant.docx # Technical Datasheet - Smart Rehabilitation Glove
 ├── .gitignore
 └── README.md
