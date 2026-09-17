@@ -155,7 +155,7 @@ tremor more heavily than an amplitude exercise.
 ### Layer 3 - Recovery Prediction (Linear Regression)
 
 Linear regression on AROM scores from the last 10 sessions.  
-Output displayed on OLED: `"+12° in ~2 weeks"` / `"Stable progression"` / `"Consult your physio"`.  
+Output displayed on OLED: `"+X° in ~2 weeks"` / `"Stable progression"` / `"Consult your physio"`.  
 Minimum 3 completed sessions required before prediction is shown.
 
 ---
@@ -214,7 +214,7 @@ rehab-glove-ai/
 │   └── gant_esp32_v2.ino          # ESP32 firmware: EMA filter, state machine, WiFi
 ├── ia/
 │   ├── couche1_knn.py             # k-NN classifier + feature extractor
-│   ├── couche2_rl_env.py          # Q-Learning RL agent + session manager
+│   ├── couche2_rl_env.py          # Adaptive RL agent (reward shaping) + session manager
 │   ├── exercises.py               # Exercise library (10 exercises × 5 levels)
 │   ├── patient_sim.py             # Patient simulator for offline RL testing
 │   └── modele_knn.json            # Serialized trained k-NN model
