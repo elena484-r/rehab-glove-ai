@@ -19,7 +19,7 @@ In all these contexts, evidence-based rehabilitation requires **300–400 repeti
 This project is a **low-cost connected glove** designed for any patient requiring structured hand motor rehabilitation, that:
 - Measures finger flexion and grip force in real time
 - Classifies the patient's motor deficit profile using a **k-NN classifier**
-- Adapts exercise difficulty dynamically via a **Q-Learning RL agent**
+- Adapts exercise difficulty dynamically via a **adaptive RL agent with reward shaping**
 - Predicts motor recovery trajectory via **linear regression**
 - Generates personalized French coaching messages via the **Claude API**
 
@@ -46,12 +46,12 @@ All AI processing runs on a Raspberry Pi 5. The ESP32 handles only signal acquis
 │             k-NN  ·  5 biomechanical features  ·  4 classes │
 │                                                             │
 │   Layer 2 — Adaptive Difficulty (RL agent)                  │
-│             Q-Learning · Bellman equation · ε-greedy        │
+│            Rule-based adaptive policy · Reward shaping      │
 │             Safety Envelope (clinical constraints)          │
 │                                                             │
 │   Layer 3 — Recovery Prediction                             │
 │             Linear regression on session history            │
-│             → "＋12° in ~2 weeks" displayed on OLED        │
+│             → "X° in ~2 weeks" displayed on OLED         │
 │                                                             │
 │   Coach — Claude API                                        │
 │             Personalized motivational messages in French    │
@@ -65,7 +65,7 @@ All AI processing runs on a Raspberry Pi 5. The ESP32 handles only signal acquis
 |-------|------|--------|----------|
 | **0 — Signal filtering** | Smooth Velostat sensor noise | EMA filter (α = 0.2) | ESP32 C++ |
 | **1 — Motor profile classification** | Identify deficit type from 5 extracted features | k-NN (k=5, scikit-learn) | RPi Python |
-| **2 — Adaptive difficulty** | Adjust exercise level in real time | Q-Learning · Bellman · ε-greedy | RPi Python |
+| **2 — Adaptive difficulty** | Adjust exercise level in real time | Rule-based adaptive policy · Reward shaping · Safety Envelope | RPi Python |
 | **3 — Recovery prediction** | Predict AROM trajectory over weeks | Linear regression | RPi Python |
 | **Coach** | Transform metrics into natural language | Claude API (claude-3-haiku) | RPi Python |
 
@@ -107,46 +107,47 @@ The classifier maps **5 biomechanical features** to **4 motor deficit profiles**
 
 ---
 
-### Layer 2 - Adaptive RL Agent (Q-Learning)
+### Layer 2 - Adaptive RL Agent (Rule-based Policy)
 
-The difficulty adaptation is modelled as a **Markov Decision Process (MDP)**:
+The difficulty adaptation uses a **rule-based adaptive policy with 
+reward shaping**, designed to mirror clinical decision-making.
 
-**State space** `S = (AROM_bin, force_bin, tremor_bin, level, fatigue_bin)` - 5 dimensions, 108 discrete states.
+**State tracked per patient:**
+- Last 3 exercise results (sliding window)
+- Current difficulty level [1–5]
+- Fatigue index [0–1], accumulated across series
+- Consecutive successes at level 5
 
 **Action space:**
 
-| Action | Effect |
-|--------|--------|
-| A0 — Decrease | Difficulty level - 1 (min 1) |
-| A1 - Maintain | No change |
-| A2 - Increase | Difficulty level + 1 (max 5) |
-| A3 - Next exercise | Advance to next exercise in the profile's sequence |
+| Action | Effect | Trigger condition |
+|--------|--------|------------------|
+| A0 — Maintain | Level unchanged | Ambiguous signal |
+| A1 — Increase | Level + 1 (max 5) | 3 consecutive successes |
+| A2 — Decrease | Level − 1 (min 1) | 2 consecutive failures or high fatigue |
+| A3 — Next exercise | Exercise idx + 1 · Level reset to 1 | Level 5 validated (3 successes) or 5 series cap reached |
 
 **Reward function:**
 
-$$R_t = w_1 \cdot \text{AROM} + w_2 \cdot \Delta\text{ROM} - w_3 \cdot \text{Tremor} - w_4 \cdot (1 - \text{success}) - w_5 \cdot \text{Fatigue}$$
+$$R = w_1 \cdot \text{AROM} + w_2 \cdot \Delta\text{ROM} - w_3 \cdot \text{Tremor} - w_4 \cdot (1 - \text{success}) - w_5 \cdot \text{Fatigue}$$
 
-Weights $w_i$ are exercise-specific (defined in `exercises.py`).
+Weights $w_i$ are exercise-specific (defined in `exercises.py`),
+reflecting clinical priorities: an anti-tremor exercise penalises 
+tremor more heavily than an amplitude exercise.
 
-**Bellman update (Q-Learning):**
-
-$$Q(s_t, a_t) \leftarrow Q(s_t, a_t) + \alpha \left[ R_t + \gamma \max_{a} Q(s_{t+1}, a) - Q(s_t, a_t) \right]$$
-
-with α = 0.2, γ = 0.85, ε = 0.15.
-
-**Design choices:**
-- **Optimistic initialization** (`Q_init = +2.0`): forces exploration of all actions before exploitation, preventing premature convergence to "Maintain".
-- **Sliding window memory** (last 3 results): erases early-session failure effect; agent reacts to current patient state.
-- **Acclimatization period**: first 2 series of a new exercise apply 70% reduced failure penalty - mirroring the clinical discovery phase.
-- **Safety Envelope**: clinical rules override Q-Learning when the signal is unambiguous (3 consecutive successes → always increase; tremor > 0.65 → never increase).
-- **Persistent Q-table**: saved in `progress_patient.json` between sessions - the agent improves across sessions, not just within one.
+**Safety Envelope (clinical constraints, never overridden):**
+- Tremor > 0.65 → never increase difficulty
+- Difficulty always bounded to [1, 5]
+- 5 series on one exercise without reaching level 5 
+  → automatic progression to next exercise 
+  (prevents a patient spending 45 min on the same exercise)
 
 **Session management:**
 
 | Session | Behaviour |
 |---------|-----------|
 | Session 1 | Mandatory k-NN assessment (4 tests) |
-| Sessions 2–4 | Resume from `progress_patient.json` (Q-table included) |
+| Sessions 2–4 | Resume from `progress_patient.json` |
 | Session 5+ | Automatic k-NN re-assessment |
 
 ---
