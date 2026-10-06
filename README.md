@@ -1,6 +1,6 @@
 # 🖐️ Connected Rehabilitation Glove - Adaptive Hand Motor Recovery
 
-> **ESIEA - 2nd year preparatory cycle**  
+> **ESIEA - 3rd-year engineering student**  
 > Solo project · Hardware + Embedded AI · Portfolio for biomedical/robotics engineering internship
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)](https://python.org)
@@ -289,7 +289,7 @@ python3 patient_sim.py        # runs 4 simulated sessions with OLED output previ
 
 ## 👩‍💻 Author
 
-**Elena R.** - ESIEA, 2nd year preparatory cycle  
+**Elena Reca** - ESIEA, 3rd-year engineering student, seeking an alternance from September 2027  
 Target specialization: Biomedical Engineering · Medical Robotics · Embedded AI  
 System design and hardware integration carried out independently; software pipeline developed with the support of generative AI tools - all code fully reviewed, tested, and mastered by me.
 
