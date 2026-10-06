@@ -19,7 +19,7 @@ In all these contexts, evidence-based rehabilitation requires **300–400 repeti
 This project is a **low-cost connected glove** designed for any patient requiring structured hand motor rehabilitation, that:
 - Measures finger flexion and grip force in real time
 - Classifies the patient's motor deficit profile using a **k-NN classifier**
-- Adapts exercise difficulty dynamically via a **adaptive RL agent with reward shaping**
+- Adapts exercise difficulty dynamically via a **Adaptive Difficulty Policy (rule-based)**
 - Predicts motor recovery trajectory via **linear regression**
 - Generates personalized French coaching messages via the **Claude API**
 
@@ -45,13 +45,14 @@ All AI processing runs on a Raspberry Pi 5. The ESP32 handles only signal acquis
 │   Layer 1 — Motor Profile Classification                    │
 │             k-NN  ·  5 biomechanical features  ·  4 classes │
 │                                                             │
-│   Layer 2 — Adaptive Difficulty (RL agent)                  │
-│            Rule-based adaptive policy · Reward shaping      │
+│   Layer 2 — Adapts exercise difficulty with a rule-based    |
+| adaptive policy (a reward score is computed per series for  |
+|monitoring; no learning yet)                                 |
 │             Safety Envelope (clinical constraints)          │
 │                                                             │
 │   Layer 3 — Recovery Prediction                             │
 │             Linear regression on session history            │
-│             → "X° in ~2 weeks" displayed on OLED         │
+│             → "X° in ~2 weeks" displayed on OLED            │
 │                                                             │
 │   Coach — Claude API                                        │
 │             Personalized motivational messages in French    │
@@ -65,7 +66,7 @@ All AI processing runs on a Raspberry Pi 5. The ESP32 handles only signal acquis
 |-------|------|--------|----------|
 | **0 — Signal filtering** | Smooth Velostat sensor noise | EMA filter (α = 0.2) | ESP32 C++ |
 | **1 — Motor profile classification** | Identify deficit type from 5 extracted features | k-NN (k=5, scikit-learn) | RPi Python |
-| **2 — Adaptive difficulty** | Adjust exercise level in real time | Rule-based adaptive policy · Reward shaping · Safety Envelope | RPi Python |
+| **2 — Adaptive difficulty** | Adjust exercise level in real time | Rule-based adaptive policy · Safety Envelope | RPi Python |
 | **3 — Recovery prediction** | Predict AROM trajectory over weeks | Linear regression | RPi Python |
 | **Coach** | Transform metrics into natural language | Claude API (claude-3-haiku) | RPi Python |
 
@@ -107,10 +108,9 @@ The classifier maps **5 biomechanical features** to **4 motor deficit profiles**
 
 ---
 
-### Layer 2 - Adaptive RL Agent (Rule-based Policy)
+### Layer 2 - Adaptive Difficulty Policy (rule-based)
 
-The difficulty adaptation uses a **rule-based adaptive policy with 
-reward shaping**, designed to mirror clinical decision-making.
+The difficulty adaptation uses a **rule-based adaptive policy**, designed to mirror clinical decision-making.
 
 **State tracked per patient:**
 - Last 3 exercise results (sliding window)
@@ -154,7 +154,7 @@ tremor more heavily than an amplitude exercise.
 
 ### Layer 3 - Recovery Prediction (Linear Regression)
 
-Linear regression on AROM scores from the last 10 sessions.  
+Linear regression on the mean AROM of all recorded sessions; shown from session 4; prediction clamped to 0–90° and ±20° over 14 days 
 Output displayed on OLED: `"+X° in ~2 weeks"` / `"Stable progression"` / `"Consult your physio"`.  
 Minimum 3 completed sessions required before prediction is shown.
 
@@ -214,7 +214,7 @@ rehab-glove-ai/
 │   └── gant_esp32_v2.ino          # ESP32 firmware: EMA filter, state machine, WiFi
 ├── ia/
 │   ├── couche1_knn.py             # k-NN classifier + feature extractor
-│   ├── couche2_rl_env.py          # Adaptive RL agent (reward shaping) + session manager
+│   ├── couche2_rl_env.py          # Adaptive Difficulty Policy (rule-based) + session manager
 │   ├── exercises.py               # Exercise library (10 exercises × 5 levels)
 │   ├── patient_sim.py             # Patient simulator for offline RL testing
 │   └── modele_knn.json            # Serialized trained k-NN model
