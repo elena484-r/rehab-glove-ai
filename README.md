@@ -19,7 +19,7 @@ In all these contexts, evidence-based rehabilitation requires **300–400 repeti
 This project is a **low-cost connected glove** designed for any patient requiring structured hand motor rehabilitation, that:
 - Measures finger flexion and grip force in real time
 - Classifies the patient's motor deficit profile using a **k-NN classifier**
-- Adapts exercise difficulty dynamically via a **Adaptive Difficulty Policy (rule-based)**
+- Adapts exercise difficulty dynamically via a **Adaptive rule-based agent inspired by Reinforcement Learning (RL), using reward shaping**
 - Predicts motor recovery trajectory via **linear regression**
 - Generates personalized French coaching messages via the **Claude API**
 
@@ -46,8 +46,8 @@ All AI processing runs on a Raspberry Pi 5. The ESP32 handles only signal acquis
 │             k-NN  ·  5 biomechanical features  ·  4 classes │
 │                                                             │
 │   Layer 2 — Adapts exercise difficulty with a rule-based    |
-| adaptive policy (a reward score is computed per series for  |
-|monitoring; no learning yet)                                 |
+| adaptive policy  inspired by Reinforcement Learning (RL),   |
+| using reward shaping                                         |
 │             Safety Envelope (clinical constraints)          │
 │                                                             │
 │   Layer 3 — Recovery Prediction                             │
@@ -108,7 +108,7 @@ The classifier maps **5 biomechanical features** to **4 motor deficit profiles**
 
 ---
 
-### Layer 2 - Adaptive Difficulty Policy (rule-based)
+### Layer 2 - Adaptive rule-based agent inspired by Reinforcement Learning (RL), using reward shaping
 
 The difficulty adaptation uses a **rule-based adaptive policy**, designed to mirror clinical decision-making.
 
