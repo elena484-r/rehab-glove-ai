@@ -50,8 +50,8 @@
 // ============================================================================
 // CONFIGURATION RESEAU
 // ============================================================================
-const char* WIFI_SSID     = "Elena's Galaxy A54 5G";
-const char* WIFI_PASSWORD = "elena234";
+const char* WIFI_SSID     = "-";
+const char* WIFI_PASSWORD = "-";
 const char* SERVER_BASE   = "http://10.63.232.206:5000";
 
 // ============================================================================
