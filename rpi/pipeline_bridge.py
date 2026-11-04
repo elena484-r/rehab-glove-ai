@@ -1,6 +1,6 @@
 """
 ============================================================
-PIPELINE BRIDGE — GANT DE REEDUCATION AVC
+PIPELINE BRIDGE — GANT DE REEDUCATION
 ============================================================
 Sert de pont HTTP/JSON entre le firmware ESP32 et les 3 couches :
   - couche1_knn.py      : diagnostic K-NN (profil moteur)
