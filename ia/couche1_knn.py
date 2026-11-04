@@ -1,22 +1,22 @@
 """
 ============================================================
-COUCHE 1 — DIAGNOSTIC MOTEUR K-NN
+LAYER 1 — K-NN MOTOR IMPAIRMENT DIAGNOSTIC
 ============================================================
-Pipeline :
-  4 tests d'évaluation -> 5 métriques -> profil dominant
+Pipeline:
+  4 assessment tests -> 5 metrics -> dominant profile
 
-Métriques normalisées [0-100] :
-  - Amplitude  : ROM actif (flexion maximale)
-  - Force      : pression relative FSR
-  - Vitesse    : vitesse angulaire dynamique
-  - Tremblement: micro-oscillations (variance temporelle)
-  - Asymétrie  : désynchronisation interdigitale
+Normalized metrics [0-100]:
+  - Amplitude    : Active ROM (maximum flexion)
+  - Strength     : Relative FSR pressure
+  - Speed        : Dynamic angular velocity
+  - Tremor       : Micro-oscillations (temporal variance)
+  - Asymmetry    : Inter-finger desynchronization
 
-Profils :
-  - deficit_mobilite
-  - deficit_controle
+Profiles:
+  - deficit_mobility
+  - deficit_control
   - deficit_coordination
-  - recuperation
+  - recovery
 ============================================================
 """
 
@@ -42,7 +42,7 @@ PRES_MAX = [3500, 3500, 3500]
 
 
 class ExtracteurMetriques:
-    """Extrait les 5 metriques depuis les 4 tests d'evaluation."""
+    """Extracts the 5 metrics from the 4 assessment tests."""
 
     def extraire(self, test1_angles, test2_angles, test3_angles,
                  test3_pression, test4_angles):
@@ -52,11 +52,11 @@ class ExtracteurMetriques:
         t4 = np.array(test4_angles) if test4_angles else np.zeros((1, 5))
         p3 = np.array(test3_pression) if test3_pression else np.zeros((1, 3))
 
-        # 1. Amplitude (Test 1 - flexion max)
+       # 1. Amplitude (Test 1 - maximum flexion)
         amplitude_max = np.max(t1, axis=0)
         amplitude = float(np.mean(amplitude_max) / 90.0 * 100.0)
 
-        # 2. Vitesse (Tests 1 et 3)
+        # 2. Speed (Tests 1 and 3)
         vmax = 0.0
         for arr in [t1, t3]:
             if len(arr) > 1:
@@ -64,16 +64,16 @@ class ExtracteurMetriques:
                 vmax = max(vmax, float(np.max(np.mean(delta, axis=1))))
         vitesse = min(100.0, vmax / 45.0 * 100.0)
 
-        # 3. Force (Test 3 - pression FSR)
+        # 3. Strength (Test 3 - FSR pressure)
         force = float(np.mean(p3) / 100.0 * 100.0) if p3.size > 0 else 0.0
 
-        # 4. Tremblement (Test 2 - maintien statique = variance)
+        # 4. Tremor (Test 2 - static hold = variance)
         if len(t2) > 1:
             tremblement = min(100.0, float(np.mean(np.var(t2, axis=0))) / 50.0 * 100.0)
         else:
             tremblement = 0.0
 
-        # 5. Asymetrie (Tests 3 et 4 - ecart entre doigts)
+        # 5. Asymmetry (Tests 3 and 4 - inter-finger difference)
         asym_vals = []
         for arr in [t3, t4]:
             if len(arr) > 0:
@@ -90,7 +90,7 @@ class ExtracteurMetriques:
 
 
 def generer_dataset(n_par_classe=80):
-    """Genere donnees simulees avec distributions realistes par profil."""
+    """Generates simulated data with realistic distributions for each profile."""
     rng = np.random.default_rng(42)
     distributions = {
         "deficit_mobilite":
@@ -111,7 +111,7 @@ def generer_dataset(n_par_classe=80):
 
 
 class ClassifieurKNN:
-    """Classifieur k-NN pour le diagnostic du profil moteur."""
+    """k-NN classifier for motor profile diagnosis."""
 
     def __init__(self, k=5):
         self.k = k
