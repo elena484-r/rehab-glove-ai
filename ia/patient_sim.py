@@ -1,15 +1,15 @@
 """
 ============================================================
-PATIENT_SIM.PY — Simulateur de patient pour tests RL
+PATIENT_SIM.PY — Patient simulator for RL testing
 ============================================================
-Simule la main d'un patient avec :
-  - Raideur initiale selon le profil
-  - Tremblement variable
-  - Fatigue progressive dans la seance
-  - Progression lente entre les seances
+Simulates a patient's hand with:
+  - Initial stiffness depending on the profile
+  - Variable tremor
+  - Progressive fatigue during the session
+  - Slow progress between sessions
 
-Utilise uniquement pour tester la boucle RL
-sans hardware physique connecte.
+Used only to test the RL loop
+without connected physical hardware.
 ============================================================
 """
 
@@ -18,9 +18,9 @@ import numpy as np
 
 class PatientSimulator:
     """
-    Simule les performances d'un patient post-AVC.
-    Retourne des metriques realistes selon l'exercice
-    et l'etat interne du patient.
+    Simulates the performance of a post-stroke patient.
+    Returns realistic metrics based on the exercise
+    and the patient's internal state.
     """
 
     PROFILS_PARAMS = {
@@ -51,31 +51,31 @@ class PatientSimulator:
         self.rng    = np.random.default_rng(seed)
         params      = self.PROFILS_PARAMS[profil]
 
-        # Etat interne
+        # Internal state
         self.amplitude   = params["amplitude_base"]
         self.force       = params["force_base"]
         self.vitesse     = params["vitesse_base"]
         self.tremblement = params["tremblement_base"]
         self.asymetrie   = params["asymetrie_base"]
-        self.fatigue     = 0.0          # 0 = repose, 1 = epuise
+        self.fatigue     = 0.0          # 0 = rested, 1 = exhausted
         self.seance      = 0
         self.progression = params["taux_progression"]
 
     def simuler_exercice(self, exercice, niveau):
         """
-        Simule la performance du patient sur un exercice a un niveau donne.
-        Retourne les metriques observees [0-1] et si l'exercice est reussi.
+        Simulates the patient's performance on an exercise at a given level.
+        Returns the observed metrics [0-1] and whether the exercise is successful.
         """
         niv_params = exercice.niveaux[niveau - 1]
         seuil      = niv_params.seuil_succes
 
-        # Difficulte augmente la fatigue
+        # Difficulty increases fatigue
         self.fatigue = min(1.0, self.fatigue + 0.05 * niveau)
 
-        # Bruit gaussien realiste
+        # Realistic Gaussian noise
         bruit = lambda: self.rng.normal(0, 0.04)
 
-        # Performance observee (penalisee par la fatigue)
+        # Observed performance (penalized by fatigue)
         facteur_fatigue = 1.0 - 0.3 * self.fatigue
 
         obs = {
@@ -86,9 +86,9 @@ class PatientSimulator:
             "asymetrie":   np.clip(self.asymetrie    + bruit(), 0, 1),
         }
 
-        # Succes : metrique principale depasse le seuil
+        # Success: the primary metric exceeds the threshold
         m_princ = obs[exercice.metrique_principale]
-        # Pour tremblement : succes si FAIBLE (inverser)
+        # For tremor: success means a LOW value (invert)
         if exercice.metrique_principale == "tremblement":
             succes = (1.0 - m_princ) >= seuil
         else:
@@ -97,10 +97,10 @@ class PatientSimulator:
         return obs, succes
 
     def nouvelle_seance(self):
-        """Reinitialise la fatigue et applique la progression inter-seances."""
+        """Resets fatigue and applies progress between sessions."""
         self.fatigue  = 0.0
         self.seance  += 1
-        # Progression lente mais reelle
+        # Slow but real progress
         self.amplitude   = min(1.0, self.amplitude   + self.progression)
         self.force       = min(1.0, self.force        + self.progression * 0.8)
         self.vitesse     = min(1.0, self.vitesse      + self.progression * 0.7)
@@ -108,7 +108,7 @@ class PatientSimulator:
         self.asymetrie   = max(0.0, self.asymetrie    - self.progression * 0.6)
 
     def etat(self):
-        """Retourne l'etat actuel du patient."""
+        """Returns the patient's current state."""
         return {
             "profil":      self.profil,
             "seance":      self.seance,
