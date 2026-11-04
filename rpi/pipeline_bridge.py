@@ -1,25 +1,26 @@
+```python
 """
 ============================================================
-PIPELINE BRIDGE — GANT DE REEDUCATION
+PIPELINE BRIDGE — REHABILITATION GLOVE
 ============================================================
-Sert de pont HTTP/JSON entre le firmware ESP32 et les 3 couches :
-  - couche1_knn.py      : diagnostic K-NN (profil moteur)
-  - exercises.py         : bibliotheque des 10 exercices (5 niveaux chacun)
-  - couche2_rl_env.py    : agent RL adaptatif (difficulte, reward shaping)
+Acts as an HTTP/JSON bridge between the ESP32 firmware and the 3 layers:
+  - couche1_knn.py      : K-NN diagnosis (motor profile)
+  - exercises.py         : library of 10 exercises (5 levels each)
+  - couche2_rl_env.py    : adaptive rule-based agent (difficulty, reward shaping)
 
-Routes exposees (doivent matcher EXACTEMENT ce que envoie esp32.cpp) :
-  GET  /status      -> l'ESP32 l'appelle a l'accueil (double appui) pour
-                        savoir s'il doit passer par l'evaluation K-NN ou
-                        reprendre directement une seance en cours.
-  POST /evaluation   -> l'ESP32 envoie les 4 tests bruts (test1_angles,
+Exposed routes (must match EXACTLY what esp32.cpp sends):
+  GET  /status      -> the ESP32 calls this at startup (double press) to
+                        determine whether it should perform a K-NN assessment
+                        or directly resume an ongoing session.
+  POST /evaluation   -> the ESP32 sends the 4 raw assessment tests (test1_angles,
                         test2_angles, test3_angles, test3_pression,
-                        test4_angles) a la fin de l'evaluation.
-  POST /data          -> l'ESP32 envoie, a la fin de CHAQUE SERIE (= une
-                        tentative complete d'atteindre repetitions_cible a
-                        la difficulte courante, ou un abandon volontaire) :
-                        serie_angles, serie_pression (buffer complet
-                        echantillonne a 300ms), succes, echec_manuel.
-                        Une serie = un appel a AgentRL.step().
+                        test4_angles) at the end of the assessment.
+  POST /data          -> the ESP32 sends, at the end of EACH SET (= one
+                        complete attempt to reach repetitions_cible at the
+                        current difficulty level, or a voluntary abandonment):
+                        serie_angles, serie_pression (complete buffer
+                        sampled every 300ms), succes, echec_manuel.
+                        One set = one call to AgentRL.step().
 ============================================================
 """
 
@@ -36,13 +37,13 @@ from exercises import BIBLIOTHEQUE
 
 app = Flask(__name__)
 
-HISTORIQUE_FILE = "historique_patient.json"   # journal amplitude moyenne par seance (pour la regression)
-SESSION_FLAG_FILE = "session_state.json"      # persiste seance_terminee_flag entre 2 redemarrages du serveur
-SEANCE_MIN_PREDICTION = 4  # pas de prediction chiffree avant la seance 4 (pas assez de donnees)
+HISTORIQUE_FILE = "historique_patient.json"   # average amplitude log per session (for regression)
+SESSION_FLAG_FILE = "session_state.json"      # persists seance_terminee_flag across server restarts
+SEANCE_MIN_PREDICTION = 4  # no numerical prediction before session 4 (insufficient data)
 
 
 def _lire_flag_fin_seance():
-    """Relit sur disque si la derniere seance connue s'est terminee (survit a un redemarrage)."""
+    """Reads from disk whether the last known session has ended (persists across restarts)."""
     if not os.path.exists(SESSION_FLAG_FILE):
         return False
     try:
@@ -57,17 +58,17 @@ def _ecrire_flag_fin_seance(valeur):
         json.dump({"seance_terminee": bool(valeur)}, f)
 
 # ============================================================================
-# ETAT GLOBAL DU SERVEUR (mono-patient, mono-gant — un seul device connecte)
+# GLOBAL SERVER STATE (single-patient, single-glove setup — one connected device)
 # ============================================================================
-knn_model = None          # ClassifieurKNN entraine au demarrage
+knn_model = None          # K-NN classifier trained at startup
 etat_courant = None       # EtatPatient | None
 agent_courant = None      # AgentRL | None
-seance_terminee_flag = False   # mis a True quand AgentRL.step() renvoie fin_seance
-amplitudes_seance_courante = []  # amplitudes (deg) de chaque serie de la seance en cours
+seance_terminee_flag = False   # set to True when AgentRL.step() returns fin_seance
+amplitudes_seance_courante = []  # amplitudes (degrees) from each set in the current session
 
 
 def _charger_etat_sauvegarde():
-    """Recharge l'etat patient depuis progress_patient.json si present."""
+    """Reloads the patient state from progress_patient.json, if present."""
     global etat_courant, agent_courant
     etat = GestionnaireSession.charger_progression()
     if etat is not None:
@@ -77,13 +78,13 @@ def _charger_etat_sauvegarde():
 
 
 def _reponse_exercice_courant(extra=None):
-    """Construit la portion JSON decrivant l'exercice/niveau courant pour l'ESP32."""
+    """Builds the JSON payload describing the current exercise and difficulty level for the ESP32."""
     ex = BIBLIOTHEQUE[etat_courant.exercice_actuel_id]
-    niveau = ex.niveaux[etat_courant.difficulte - 1]  # niveaux 1..5 -> index 0..4
+    niveau = ex.niveaux[etat_courant.difficulte - 1]  # levels 1..5 -> indices 0..4
     payload = {
-        "exercice_id": ex.id,                                   # id brut bibliotheque (1-10), usage interne/logs
-        "exercice_position": etat_courant.exercice_idx + 1,      # position 1..N dans le parcours du profil -> a afficher
-        "exercice_total": len(etat_courant.exercices_ids),       # N = nb d'exercices du profil (affichage "X / N")
+        "exercice_id": ex.id,                                   # raw library ID (1-10), for internal use/logging
+        "exercice_position": etat_courant.exercice_idx + 1,      # position 1..N in the profile's exercise sequence -> displayed on screen
+        "exercice_total": len(etat_courant.exercices_ids),       # N = number of exercises assigned to the profile (displayed as "X / N")
         "consigne_oled": niveau.consigne_oled,
         "repetitions": niveau.repetitions,
         "difficulte": etat_courant.difficulte,
@@ -96,10 +97,10 @@ def _reponse_exercice_courant(extra=None):
 
 def _extraire_metriques_serie(serie_angles, serie_pression):
     """
-    Calcule les 5 metriques normalisees [0-1] attendues par AgentRL.calculer_reward
-    a partir du buffer brut d'une serie (meme logique que ExtracteurMetriques,
-    mais sur un seul buffer continu au lieu des 4 tests separes, et sans le
-    facteur *100 puisque couche2_rl_env attend une echelle [0-1]).
+    Computes the 5 normalized metrics [0-1] expected by AgentRL.calculer_reward
+    from the raw buffer of one set (same logic as ExtracteurMetriques,
+    but applied to a single continuous buffer instead of 4 separate tests,
+    and without the *100 factor because couche2_rl_env expects a [0-1] scale).
     """
     if not serie_angles:
         return {"amplitude": 0.0, "force": 0.0, "vitesse": 0.0,
@@ -108,11 +109,11 @@ def _extraire_metriques_serie(serie_angles, serie_pression):
     angles = np.array(serie_angles)      # (N, 5)
     pression = np.array(serie_pression) if serie_pression else np.zeros((1, 3))
 
-    # Amplitude : moyenne des maxima par doigt, normalisee sur 90 degres
+    # Amplitude: mean of the maximum values per finger, normalized to 90 degrees
     amplitude = float(np.mean(np.max(angles, axis=0)) / 90.0)
     amplitude = max(0.0, min(1.0, amplitude))
 
-    # Vitesse : plus grande variation moyenne inter-echantillon (deg/echantillon), normalisee
+    # Speed: maximum mean inter-sample variation (degrees/sample), normalized
     if len(angles) > 1:
         delta = np.abs(np.diff(angles, axis=0))
         vitesse = float(np.max(np.mean(delta, axis=1))) / 45.0
@@ -120,18 +121,18 @@ def _extraire_metriques_serie(serie_angles, serie_pression):
         vitesse = 0.0
     vitesse = max(0.0, min(1.0, vitesse))
 
-    # Force : pression moyenne (deja en % 0-100 cote firmware), normalisee
+    # Force: mean pressure (already expressed as a percentage from 0 to 100 by the firmware), normalized
     force = float(np.mean(pression)) / 100.0 if pression.size > 0 else 0.0
     force = max(0.0, min(1.0, force))
 
-    # Tremblement : variance temporelle moyenne des angles, normalisee
+    # Tremor: mean temporal variance of the angles, normalized
     if len(angles) > 1:
         tremblement = float(np.mean(np.var(angles, axis=0))) / 50.0
     else:
         tremblement = 0.0
     tremblement = max(0.0, min(1.0, tremblement))
 
-    # Asymetrie : dispersion entre les maxima des differents doigts, normalisee
+    # Asymmetry: dispersion between the maximum values of the different fingers, normalized
     asymetrie = float(np.std(np.max(angles, axis=0))) / 45.0
     asymetrie = max(0.0, min(1.0, asymetrie))
 
@@ -152,7 +153,7 @@ def _lire_historique():
 
 
 def _enregistrer_seance_dans_historique(numero_seance, amplitude_moy_deg):
-    """Ajoute un point (date, amplitude moyenne en degres) au journal de progression."""
+    """Adds one (date, mean amplitude in degrees) entry to the progress log."""
     historique = _lire_historique()
     historique.append({
         "seance": numero_seance,
@@ -166,7 +167,7 @@ def _enregistrer_seance_dans_historique(numero_seance, amplitude_moy_deg):
 
 def _construire_prediction(etat: EtatPatient, historique):
     """
-    Message de prediction affiche en fin de seance (ecran ETAT_PREDICTION).
+    Builds the prediction message displayed at the end of a session (ETAT_PREDICTION screen).
     """
     if etat.seance < SEANCE_MIN_PREDICTION or len(historique) < 2:
         return "Progression en cours : quelques seances de plus sont necessaires pour une estimation chiffree."
@@ -177,7 +178,7 @@ def _construire_prediction(etat: EtatPatient, historique):
     t0 = dates[0]
     temps_total_jours = (dates[-1] - t0).total_seconds() / 86400.0
 
-    # 1. Si les tests sont realises dans la meme journee (ex: tests rapides), la pente en jours est faussee
+    # 1. If tests are performed on the same day (e.g. quick tests), the slope in days is distorted
     if temps_total_jours < 0.5:
         return f"Derniere amplitude moyenne : {amplitudes[-1]:.1f} deg. Poursuivez les seances quotidiennement pour activer la prediction."
 
@@ -190,14 +191,14 @@ def _construire_prediction(etat: EtatPatient, historique):
     jour_actuel = jours[-1][0]
     amplitude_actuelle = amplitudes[-1]
     
-    # Prediction brute
+    # Raw prediction
     amplitude_predite_raw = float(modele.predict([[jour_actuel + 14]])[0])
     
-    # 2. Sécurité : On borne la prédiction entre 0° et 90° (limites anatomiques)
+    # 2. Safety: bound the prediction between 0° and 90° (anatomical limits)
     amplitude_predite_14j = max(0.0, min(90.0, amplitude_predite_raw))
     delta = amplitude_predite_14j - amplitude_actuelle
 
-    # 3. Sécurité : Plafond de variation réaliste (+/- 20° max sur 2 semaines)
+    # 3. Safety: maximum realistic variation (+/- 20° over two weeks)
     delta = max(-20.0, min(20.0, delta))
 
     if delta >= 1.0:
@@ -234,9 +235,9 @@ def get_status():
                 "materiel_requis": "Balle souple",
             })
 
-        # Seances 2-4 : reprise directe, pas de nouvelle evaluation.
-        # On reboucle sur le 1er exercice du profil (le round precedent est termine) ;
-        # la difficulte gagnee est conservee, mais les compteurs de serie repartent a zero.
+        # Sessions 2-4: resume directly without a new assessment.
+        # Restart from the first exercise in the profile (the previous round is complete);
+        # the achieved difficulty level is preserved, but set counters are reset to zero.
         etat_courant.seance = prochaine_seance
         etat_courant.exercice_idx = 0
         etat_courant.series_faites = 0
@@ -253,7 +254,7 @@ def get_status():
             "materiel_requis": "Balle souple",
         }))
 
-    # Seance deja en cours (rafraichissement d'ecran, pas de changement d'etat)
+    # Session already in progress (screen refresh; no state change)
     return jsonify(_reponse_exercice_courant({
         "evaluation_requise": False,
         "seance": etat_courant.seance,
@@ -262,7 +263,7 @@ def get_status():
 
 
 # ============================================================================
-# POST /evaluation — recoit les 4 tests bruts, calcule le profil K-NN
+# POST /evaluation — receives the 4 raw assessment tests and computes the K-NN profile
 # ============================================================================
 @app.route('/evaluation', methods=['POST'])
 def evaluation():
@@ -293,7 +294,7 @@ def evaluation():
 
 
 # ============================================================================
-# POST /data — une serie complete (succes ou abandon volontaire)
+# POST /data — receives one complete set (success or voluntary abandonment)
 # ============================================================================
 @app.route('/data', methods=['POST'])
 def receive_data():
@@ -311,7 +312,7 @@ def receive_data():
     metriques_obs = _extraire_metriques_serie(serie_angles, serie_pression)
     succes_reel = succes and not echec_manuel
 
-    # Amplitude reelle en degres (0-1 normalise -> 0-90 deg), utilisee pour la regression de progression
+    # Actual amplitude in degrees (normalized 0-1 -> 0-90 degrees), used for progress regression
     if serie_angles:
         amplitudes_seance_courante.append(metriques_obs["amplitude"] * 90.0)
 
@@ -346,7 +347,7 @@ def receive_data():
 
 
 # ============================================================================
-# DEMARRAGE
+# STARTUP
 # ============================================================================
 if __name__ == '__main__':
     print("[BRIDGE] Chargement K-NN...")
@@ -364,3 +365,4 @@ if __name__ == '__main__':
     print("PIPELINE BRIDGE — GANT REEDUCATION (K-NN + RL branches)")
     print("=======================================================")
     app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+```
