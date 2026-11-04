@@ -1,14 +1,15 @@
+```python
 """
 ============================================================
-EXERCISES.PY — Bibliotheque de 10 exercices instrumentes
+EXERCISES.PY — Library of 10 instrumented exercises
 ============================================================
-Chaque exercice a :
-  - 5 niveaux de difficulte (1=facile, 5=expert)
-  - Des poids de reward adaptes a son objectif
-  - Une liste de consignes affichees sur l'OLED
-  - Une assignation aux profils moteurs concernes
+Each exercise has:
+  - 5 difficulty levels (1=beginner, 5=expert)
+  - Reward weights adapted to its objective
+  - A list of instructions displayed on the OLED
+  - An assignment to the relevant motor profiles
 
-Attribution exercices -> profils :
+Exercise assignment -> profiles:
   deficit_mobilite    : E1, E2, E3, E7
   deficit_controle    : E3, E8, E9, E4
   deficit_coordination: E2, E4, E5, E6
@@ -20,42 +21,42 @@ from dataclasses import dataclass, field
 
 
 # ============================================================
-# PARAMETRES PAR NIVEAU DE DIFFICULTE
+# PARAMETERS BY DIFFICULTY LEVEL
 # ============================================================
 @dataclass
 class NiveauDifficulte:
-    niveau: int               # 1 a 5
-    repetitions: int          # nombre de repetitions cibles
-    duree_s: int              # duree maintien en secondes (si applicable)
+    niveau: int               # 1 to 5
+    repetitions: int          # target number of repetitions
+    duree_s: int              # holding duration in seconds (if applicable)
     vitesse: str              # "lente" | "normale" | "rapide"
-    seuil_succes: float       # seuil de succes metrique principale [0-1]
-    consigne_oled: str        # texte affiche sur l'ecran OLED
+    seuil_succes: float       # success threshold for the main metric [0-1]
+    consigne_oled: str        # text displayed on the OLED screen
 
 
 # ============================================================
-# CLASSE DE BASE EXERCICE
+# BASE EXERCISE CLASS
 # ============================================================
 @dataclass
 class Exercice:
     id: int
     nom: str
     description: str
-    profils_cibles: list      # profils pour lesquels cet exercice est prescrit
-    metrique_principale: str  # metrique evaluee en priorite
+    profils_cibles: list      # profiles for which this exercise is prescribed
+    metrique_principale: str  # primary metric being evaluated
     poids_reward: dict        # w_amplitude, w_force, w_vitesse, w_tremblement, w_asymetrie
-    niveaux: list             # liste de 5 NiveauDifficulte
-    MAX_SERIES: int = 5       # plafond de securite : max series avant passage auto
+    niveaux: list             # list of 5 NiveauDifficulte levels
+    MAX_SERIES: int = 5       # safety limit: maximum number of sets before automatic progression
 
 
 # ============================================================
-# DEFINITION DES 10 EXERCICES
+# DEFINITION OF THE 10 EXERCISES
 # ============================================================
 def creer_bibliotheque():
-    """Retourne la liste des 10 exercices avec leurs 5 niveaux."""
+    """Returns the library of 10 exercises with their 5 difficulty levels."""
 
     exercices = [
 
-        # E1 — Ouverture/Fermeture globale
+        # E1 — Global hand opening/closing
         Exercice(
             id=1, nom="Ouverture/Fermeture",
             description="Ouvrez et fermez la main completement.",
@@ -71,7 +72,7 @@ def creer_bibliotheque():
             ]
         ),
 
-        # E2 — Flexion doigt par doigt
+        # E2 — Finger-by-finger flexion
         Exercice(
             id=2, nom="Flexion par doigt",
             description="Pliez chaque doigt un par un.",
@@ -87,7 +88,7 @@ def creer_bibliotheque():
             ]
         ),
 
-        # E3 — Flexion progressive controlee
+        # E3 — Controlled progressive flexion
         Exercice(
             id=3, nom="Flexion controlee",
             description="Fermez la main tres lentement, maintenez.",
@@ -103,7 +104,7 @@ def creer_bibliotheque():
             ]
         ),
 
-        # E4 — Opposition Pouce-Index
+        # E4 — Thumb-to-index finger opposition
         Exercice(
             id=4, nom="Opposition Pouce-Index",
             description="Pincez avec le pouce et l'index.",
@@ -119,7 +120,7 @@ def creer_bibliotheque():
             ]
         ),
 
-        # E5 — Sequence Pouce -> chaque doigt
+        # E5 — Thumb-to-finger sequence
         Exercice(
             id=5, nom="Sequence pouce-doigts",
             description="Touchez chaque doigt avec le pouce en sequence.",
@@ -135,7 +136,7 @@ def creer_bibliotheque():
             ]
         ),
 
-        # E6 — Sequence digitale 1-2-3-4-5
+        # E6 — Sequential finger flexion (1-2-3-4-5)
         Exercice(
             id=6, nom="Sequence digitale",
             description="Pliez les doigts un par un en sequence 1-2-3-4-5.",
@@ -151,7 +152,7 @@ def creer_bibliotheque():
             ]
         ),
 
-        # E7 — Pression progressive
+        # E7 — Progressive pressure
         Exercice(
             id=7, nom="Pression progressive",
             description="Serrez progressivement de faible a fort.",
@@ -167,7 +168,7 @@ def creer_bibliotheque():
             ]
         ),
 
-        # E8 — Maintien de pression isometrique
+        # E8 — Isometric pressure hold
         Exercice(
             id=8, nom="Maintien isometrique",
             description="Serrez et maintenez la pression constante.",
@@ -183,7 +184,7 @@ def creer_bibliotheque():
             ]
         ),
 
-        # E9 — Atteindre + maintenir cible
+        # E9 — Reach and hold a target angle
         Exercice(
             id=9, nom="Cible angulaire",
             description="Atteignez un angle precis et maintenez.",
@@ -199,7 +200,7 @@ def creer_bibliotheque():
             ]
         ),
 
-        # E10 — Tache fonctionnelle : Saisir -> Maintenir -> Relacher
+        # E10 — Functional task: grasp -> hold -> release
         Exercice(
             id=10, nom="Tache fonctionnelle",
             description="Saisissez, maintenez, relacher. Simuler un objet.",
@@ -219,7 +220,7 @@ def creer_bibliotheque():
     return {ex.id: ex for ex in exercices}
 
 
-# Attribution profil -> exercices (IDs)
+# Profile-to-exercise assignment (IDs)
 PROFIL_EXERCICES = {
     "deficit_mobilite":     [1, 2, 3, 7],
     "deficit_controle":     [3, 8, 9, 4],
@@ -231,7 +232,7 @@ BIBLIOTHEQUE = creer_bibliotheque()
 
 
 def get_exercices_pour_profil(profil):
-    """Retourne la liste ordonnee des exercices pour un profil donne."""
+    """Returns the ordered list of exercises for a given profile."""
     ids = PROFIL_EXERCICES.get(profil, [1, 2, 3, 7])
     return [BIBLIOTHEQUE[i] for i in ids]
 
@@ -243,3 +244,4 @@ if __name__ == "__main__":
         for eid in ids:
             ex = BIBLIOTHEQUE[eid]
             print(f"  E{eid}: {ex.nom} | metrique: {ex.metrique_principale}")
+```
