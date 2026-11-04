@@ -1,22 +1,22 @@
 """
 ============================================================
-COUCHE 2 — AGENT RL ADAPTATIF
+LAYER 2 — ADAPTIVE RL AGENT
 ============================================================
-Regles exactes specifiees :
+Exact specified rules:
 
-Seance 1          : evaluation K-NN -> profil -> exercices
-Seances 2-4       : charge progress_patient.json, reprend
-Seance 5 (ou +)   : re-evaluation K-NN si progression
+Session 1          : K-NN assessment -> profile -> exercises
+Sessions 2-4       : loads progress_patient.json and resumes
+Session 5 (or later): K-NN re-assessment if progress is detected
 
-Action 3 (passer a l'exercice suivant) declenchee si :
-  1. Patient reussi 3x de suite au niveau 5 (maitrise complete)
-  2. Plafond atteint : MAX_SERIES tentatives sans atteindre niv 5
+Action 3 (move to the next exercise) is triggered if:
+  1. Patient succeeds 3 times in a row at level 5 (complete mastery)
+  2. Maximum reached: MAX_SERIES attempts without reaching level 5
 
-Safety Envelope : difficulte clampee [1-5], jamais hors bornes.
+Safety Envelope: difficulty clamped to [1-5], never outside bounds.
 
-Reward Shaping :
-  R = somme(w_i * performance_i) - penalites
-  Les poids sont ceux de l'exercice en cours.
+Reward Shaping:
+  R = sum(w_i * performance_i) - penalties
+  The weights correspond to the current exercise.
 ============================================================
 """
 
@@ -27,22 +27,22 @@ from exercises import get_exercices_pour_profil, BIBLIOTHEQUE
 
 
 PROGRESS_FILE = "progress_patient.json"
-MAX_SERIES    = 5    # plafond securite avant passage auto
-SUCCES_NV5    = 3    # nombre de succes niv5 pour valider l'exercice
+MAX_SERIES    = 5    # safety limit before automatic progression
+SUCCES_NV5    = 3    # number of level 5 successes required to validate the exercise
 
 
 class EtatPatient:
-    """Etat complet du patient sauvegarde entre les seances."""
+    """Complete patient state saved between sessions."""
 
     def __init__(self, profil, exercices_ids, difficulte=1, seance=1):
         self.profil        = profil
-        self.exercices_ids = exercices_ids   # liste des IDs exercices
-        self.exercice_idx  = 0               # index dans la liste
-        self.difficulte    = difficulte      # niveau actuel [1-5]
+        self.exercices_ids = exercices_ids   # list of exercise IDs
+        self.exercice_idx  = 0               # index in the exercise list
+        self.difficulte    = difficulte      # current level [1-5]
         self.seance        = seance
-        self.historique    = []              # bool: True=succes, False=echec (3 derniers)
-        self.series_faites = 0              # compteur series exercice actuel
-        self.succes_nv5    = 0              # compteur succes au niveau 5
+        self.historique    = []              # bool: True=success, False=failure (last 3)
+        self.series_faites = 0              # number of sets completed for the current exercise
+        self.succes_nv5    = 0              # number of successes at level 5
         self.fatigue       = 0.0
 
     @property
@@ -75,15 +75,15 @@ class EtatPatient:
 
 class AgentRL:
     """
-    Agent RL adaptatif pour la gestion de la reeducation.
+    Adaptive RL agent for rehabilitation management.
 
-    Actions :
-      0 : Maintenir la difficulte
-      1 : Augmenter la difficulte (+1, max 5)
-      2 : Diminuer la difficulte (-1, min 1)
-      3 : Passer a l'exercice suivant
+    Actions:
+      0 : Maintain difficulty
+      1 : Increase difficulty (+1, max 5)
+      2 : Decrease difficulty (-1, min 1)
+      3 : Move to the next exercise
 
-    Safety Envelope : toute action est validee avant application.
+    Safety Envelope: every action is validated before being applied.
     """
 
     def __init__(self, etat: EtatPatient):
@@ -93,7 +93,7 @@ class AgentRL:
     # SAFETY ENVELOPE
     # ----------------------------------------------------------
     def _clamp_difficulte(self, d):
-        """Garantit que la difficulte reste dans [1, 5]."""
+        """Ensures that difficulty remains within [1, 5]."""
         return max(1, min(5, d))
 
     # ----------------------------------------------------------
@@ -101,14 +101,14 @@ class AgentRL:
     # ----------------------------------------------------------
     def calculer_reward(self, metriques_obs, succes, exercice):
         """
-        R = somme(w_i * perf_i) - penalites
-        Poids adaptatifs selon l'exercice en cours.
+        R = sum(w_i * perf_i) - penalties
+        Adaptive weights based on the current exercise.
         """
         w = exercice.poids_reward
         perf = metriques_obs
 
-        # Contribution positive de chaque metrique
-        # Pour le tremblement : moins = mieux, donc on inverse
+        # Positive contribution of each metric
+        # For tremor: lower is better, so the value is inverted
         r_amp   = w["amplitude"]   * perf.get("amplitude", 0)
         r_force = w["force"]       * perf.get("force", 0)
         r_vit   = w["vitesse"]     * perf.get("vitesse", 0)
@@ -117,99 +117,99 @@ class AgentRL:
 
         reward = r_amp + r_force + r_vit + r_trem + r_asym
 
-        # Penalites
+        # Penalties
         if not succes:
             reward -= 0.2
         if self.etat.fatigue > 0.7:
-            reward -= 0.15  # penalite fatigue elevee
+            reward -= 0.15  # high fatigue penalty
 
         return round(reward, 4)
 
     # ----------------------------------------------------------
-    # SELECTION ACTION
+    # ACTION SELECTION
     # ----------------------------------------------------------
     def choisir_action(self, metriques_obs, succes):
         """
-        Choisit l'action RL selon les regles specifiees.
+        Selects the RL action according to the specified rules.
 
-        Retourne (action, justification)
+        Returns (action, justification)
         """
         etat = self.etat
         hist = etat.historique
         d    = etat.difficulte
 
-        # Mise a jour historique (garder 3 derniers)
+        # Update history (keep the last 3 results)
         hist.append(succes)
         if len(hist) > 3:
             hist.pop(0)
 
-        # Mise a jour compteurs
+        # Update counters
         etat.series_faites += 1
         if succes and d == 5:
             etat.succes_nv5 += 1
         else:
             etat.succes_nv5 = 0
 
-        # Fatigue augmente avec les series
+        # Fatigue increases with each set
         etat.fatigue = min(1.0, etat.fatigue + 0.04)
 
-        # --- REGLE ACTION 3 : passer a l'exercice suivant ---
-        # Cas 1 : maitrise complete (3 succes au niveau 5)
+        # --- ACTION 3 RULE: move to the next exercise ---
+        # Case 1: complete mastery (3 successes at level 5)
         if etat.succes_nv5 >= SUCCES_NV5:
             return 3, f"Maitrise niveau 5 ! Exercice suivant."
 
-        # Cas 2 : plafond de securite (MAX_SERIES sans atteindre niv 5)
+        # Case 2: safety limit (MAX_SERIES without reaching level 5)
         if etat.series_faites >= MAX_SERIES:
             return 3, f"Plafond {MAX_SERIES} series. Exercice suivant."
 
-        # --- REGLES DIFFICULTE ---
-        # 3 succes consecutifs -> augmenter
+        # --- DIFFICULTY RULES ---
+        # 3 consecutive successes -> increase difficulty
         if len(hist) == 3 and all(hist):
             return 1, f"3 succes ! Niveau {d}->{min(5,d+1)}"
 
-        # 2 echecs consecutifs -> diminuer
+        # 2 consecutive failures -> decrease difficulty
         if len(hist) >= 2 and not any(hist[-2:]):
             return 2, f"2 echecs. Niveau {d}->{max(1,d-1)}"
 
-        # Fatigue elevee + echec -> reduire
+        # High fatigue + failure -> decrease difficulty
         if etat.fatigue > 0.7 and not succes:
             return 2, f"Fatigue elevee. Niveau {d}->{max(1,d-1)}"
 
-        # Maintenir
+        # Maintain difficulty
         return 0, f"Maintien niveau {d}"
 
     # ----------------------------------------------------------
-    # APPLIQUER ACTION
+    # APPLY ACTION
     # ----------------------------------------------------------
     def appliquer_action(self, action, justification):
-        """Applique la decision RL avec safety envelope."""
+        """Applies the decision using the safety envelope."""
         etat = self.etat
         exercice_actuel = BIBLIOTHEQUE[etat.exercice_actuel_id]
         msg = justification
 
         if action == 0:
-            # Maintien
+            # Maintain difficulty
             pass
 
         elif action == 1:
-            # Augmenter difficulte
+            # Increase difficulty
             etat.difficulte = self._clamp_difficulte(etat.difficulte + 1)
-            etat.historique = []   # reset consecutifs apres changement niveau
+            etat.historique = []   # reset consecutive results after level change
 
         elif action == 2:
-            # Diminuer difficulte
+            # Decrease difficulty
             etat.difficulte = self._clamp_difficulte(etat.difficulte - 1)
-            etat.historique = []   # reset consecutifs apres changement niveau
+            etat.historique = []   # reset consecutive results after level change
 
         elif action == 3:
-            # Passer a l'exercice suivant
+            # Move to the next exercise
             if etat.exercice_idx < len(etat.exercices_ids) - 1:
                 etat.exercice_idx += 1
                 etat.series_faites = 0
                 etat.succes_nv5    = 0
-                etat.historique    = []       # reset compteurs consecutifs
-                etat.difficulte    = 1        # reset niveau a 1
-                etat.fatigue       = 0.0      # reset fatigue pour nouvel exercice
+                etat.historique    = []       # reset consecutive result counters
+                etat.difficulte    = 1        # reset difficulty to level 1
+                etat.fatigue       = 0.0      # reset fatigue for the new exercise
                 nouvel_ex = BIBLIOTHEQUE[etat.exercice_actuel_id]
                 msg = f"{justification} -> {nouvel_ex.nom}"
             else:
@@ -219,12 +219,12 @@ class AgentRL:
         return action, msg, False  # fin_seance=False
 
     # ----------------------------------------------------------
-    # STEP COMPLET
+    # COMPLETE STEP
     # ----------------------------------------------------------
     def step(self, metriques_obs, succes):
         """
-        Un pas complet de l'agent RL.
-        Retourne : (reward, action, message, fin_seance, etat_dict)
+        Performs one complete agent step.
+        Returns: (reward, action, message, fin_seance, etat_dict)
         """
         exercice = BIBLIOTHEQUE[self.etat.exercice_actuel_id]
         reward   = self.calculer_reward(metriques_obs, succes, exercice)
@@ -235,24 +235,24 @@ class AgentRL:
 
 
 # ============================================================
-# GESTIONNAIRE DE SESSIONS
+# SESSION MANAGEMENT
 # ============================================================
 class GestionnaireSession:
     """
-    Gere la logique de sessions :
-      Seance 1   : evaluation K-NN requise
-      Seances 2-4: reprise depuis progress_patient.json
-      Seance 5+  : re-evaluation K-NN
+    Manages session logic:
+      Session 1   : K-NN assessment required
+      Sessions 2-4: resume from progress_patient.json
+      Session 5+  : K-NN re-assessment
     """
 
     @staticmethod
     def doit_reevaluer(numero_seance):
-        """Retourne True si une evaluation K-NN est necessaire."""
+        """Returns True if a K-NN assessment is required."""
         return numero_seance == 1 or numero_seance % 5 == 0
 
     @staticmethod
     def charger_progression():
-        """Charge l'etat depuis le fichier JSON. None si premiere seance."""
+        """Loads the state from the JSON file. Returns None for the first session."""
         if not os.path.exists(PROGRESS_FILE):
             return None
         with open(PROGRESS_FILE) as f:
@@ -274,9 +274,10 @@ class GestionnaireSession:
 
         with open(chemin, "w") as f:
             json.dump(etat.vers_dict(), f, indent=2, default=convertir_types_numpy)
+
     @staticmethod
     def initialiser_depuis_profil(resultat_knn):
-        """Cree un nouvel EtatPatient depuis le resultat K-NN."""
+        """Creates a new EtatPatient from the K-NN result."""
         profil    = resultat_knn["dominant_profile"]
         exercices = get_exercices_pour_profil(profil)
         ids       = [ex.id for ex in exercices]
@@ -297,7 +298,7 @@ if __name__ == "__main__":
 
     print("=== TEST AGENT RL ===")
 
-    # Simulation d'une session
+    # Simulate a session
     etat = EtatPatient(
         profil="deficit_mobilite",
         exercices_ids=[1, 2, 3, 7],
@@ -309,10 +310,10 @@ if __name__ == "__main__":
     print(f"Exercice : {BIBLIOTHEQUE[etat.exercice_actuel_id].nom}")
     print(f"Difficulte initiale : {etat.difficulte}")
 
-    # Simuler 8 steps
+    # Simulate 8 steps
     for i in range(8):
         obs     = {"amplitude":0.6,"force":0.5,"vitesse":0.4,"tremblement":0.2,"asymetrie":0.3}
-        succes  = i % 3 != 2  # echec toutes les 3 iterations
+        succes  = i % 3 != 2  # failure every 3 iterations
         reward, action, msg, fin, _ = agent.step(obs, succes)
         print(f"  Step {i+1} | succes={succes} | action={action} | {msg} | R={reward:.3f}")
         if fin:
