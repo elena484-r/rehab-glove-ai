@@ -1,6 +1,6 @@
 """
 ============================================================
-LAYER 2 — ADAPTIVE RL AGENT
+LAYER 2 — RULE-BASED ADAPTIVE AGENT
 ============================================================
 Exact specified rules:
 
@@ -75,7 +75,8 @@ class EtatPatient:
 
 class AgentRL:
     """
-    Adaptive RL agent for rehabilitation management.
+    Rule-based adaptive agent for rehabilitation management,
+    inspired by reinforcement learning concepts.
 
     Actions:
       0 : Maintain difficulty
@@ -130,7 +131,7 @@ class AgentRL:
     # ----------------------------------------------------------
     def choisir_action(self, metriques_obs, succes):
         """
-        Selects the RL action according to the specified rules.
+        Selects an action according to predefined adaptive rules.
 
         Returns (action, justification)
         """
@@ -296,7 +297,7 @@ class GestionnaireSession:
 if __name__ == "__main__":
     from exercises import BIBLIOTHEQUE
 
-    print("=== TEST AGENT RL ===")
+    print("=== TEST AGENT  ===")
 
     # Simulate a session
     etat = EtatPatient(
